@@ -5,3 +5,6 @@ format:
 
 clippy:
     cargo clippy
+
+run *ARGS:
+    cargo run --release -- {{ARGS}}
