@@ -1,3 +1,9 @@
 [submodule "rav1oli-vship/vendor/vship"]
 	path = rav1oli-vship/vendor/vship
 	url = https://codeberg.org/Line-fr/Vship.git
+[submodule "rav1oli-bestsource/vendor/bestsource"]
+	path = rav1oli-bestsource/vendor/bestsource
+	url = https://github.com/vapoursynth/bestsource.git
+[submodule "rav1oli-bestsource/vendor/libp2p"]
+	path = rav1oli-bestsource/vendor/libp2p
+	url = https://github.com/sekrit-twc/libp2p.git

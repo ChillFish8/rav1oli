@@ -1,0 +1,38 @@
+[package]
+name = "rav1oli-bestsource"
+version.workspace = true
+readme.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Frame accurate video decoding through BestSource."
+include = [
+    "Cargo.toml",
+    "build.rs",
+    "src/**",
+    "shim/**",
+    "vendor/bestsource/LICENSE",
+    "vendor/bestsource/src/audiosource.*",
+    "vendor/bestsource/src/bsshared.*",
+    "vendor/bestsource/src/gpuhash.*",
+    "vendor/bestsource/src/tracklist.*",
+    "vendor/bestsource/src/videosource.*",
+    "vendor/bestsource/src/version.h",
+    "vendor/libp2p/COPYING",
+    "vendor/libp2p/*.cpp",
+    "vendor/libp2p/*.h",
+    "vendor/libp2p/simd/*",
+]
+
+[features]
+# Links BestSource, libp2p, xxHash and FFmpeg statically from the vcpkg tree.
+static = []
+
+[dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[build-dependencies]
+cc = { workspace = true }
+pkg-config = { workspace = true }

@@ -359,6 +359,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rav1oli-bestsource"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "pkg-config",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "rav1oli-svt"
 version = "0.1.0"
 
