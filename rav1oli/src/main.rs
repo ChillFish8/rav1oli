@@ -1,8 +1,15 @@
-use clap::Parser;
+mod commands;
+
+use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
+
+use self::commands::Command;
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
+    #[command(subcommand)]
+    command: Command,
+
     /// Set the log level of the system.
     ///
     /// This is overridden by `RUST_LOG` if set. The same filter pattern
@@ -12,15 +19,35 @@ struct Args {
 }
 
 fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let mut cli = Args::command();
+    let matches = cli.get_matches_mut();
+    let args = match Args::from_arg_matches(&matches) {
+        Ok(args) => args,
+        Err(error) => error.format(&mut cli).exit(),
+    };
+
+    if let Err(error) = args.command.validate() {
+        exit_with_error(&mut cli, &matches, error);
+    }
 
     // Safety: Called from main thread
     unsafe { setup_logging(args.log_level.as_deref()) }
 
     tracing::info!("initialising");
 
+    args.command.execute()
+}
 
-    Ok(())
+/// Prints a validation error with the usage of the selected subcommand and exits.
+fn exit_with_error(cli: &mut clap::Command, matches: &ArgMatches, error: clap::Error) -> ! {
+    let Some(name) = matches.subcommand_name() else {
+        error.format(cli).exit()
+    };
+
+    match cli.find_subcommand_mut(name) {
+        Some(subcommand) => error.format(subcommand).exit(),
+        None => error.format(cli).exit(),
+    }
 }
 
 /// Initialises the logging for the system.
