@@ -1,0 +1,32 @@
+{
+  "trix_fhd" : {
+    "name": "27-inch FullHD monitor, 203 cd/m^2 peak luminance, viewed under low light levels and seen from 1.5x display height",
+    "colorspace": "SDR",
+    "resolution": [1920, 1080],
+    "diagonal_size_inches": 27,
+    "viewing_distance_meters": 0.5,
+    "contrast": 2000,
+    "max_luminance": 203,
+    "E_ambient": 20
+  },
+  "trix_uhd_sdr" : {
+    "name": "32-inch 4K SDR monitor, 203 cd/m^2 peak luminance, viewed under low-ish light levels and seen from 1.5x display height",
+    "colorspace": "SDR",
+    "resolution": [3840, 2160],
+    "diagonal_size_inches": 32,
+    "viewing_distance_meters": 0.6,
+    "contrast": 10000,
+    "max_luminance": 203,
+    "E_ambient": 20
+  },
+  "trix_uhd_hdr" : {
+    "name": "32-inch 4K HDR monitor, 600 cd/m^2 peak luminance, viewed under low-ish light levels and seen from 1.5x display height",
+    "colorspace": "HDR",
+    "resolution": [3840, 2160],
+    "diagonal_size_inches": 32,
+    "viewing_distance_meters": 0.6,
+    "contrast": 10000,
+    "max_luminance": 600,
+    "E_ambient": 60
+  }
+}

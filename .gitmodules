@@ -1,0 +1,3 @@
+[submodule "rav1oli-vship/vendor/vship"]
+	path = rav1oli-vship/vendor/vship
+	url = https://codeberg.org/Line-fr/Vship.git

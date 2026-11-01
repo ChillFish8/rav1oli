@@ -1,14 +1,25 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! GPU Butteraugli and CVVDP through Vship
+//!
+//! [device_count] and [device_info] list the devices Vship's backend can use.
+//! [Butteraugli] and [Cvvdp] score a distorted frame against a reference on one device.
+//! [Butteraugli] and [Cvvdp] can also return a [DistortionMap].
 
+mod colour;
+mod device;
+mod display;
+mod distmap;
+mod error;
+mod metric;
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "../build/shaders.rs"]
+mod shader_header;
+mod sys;
+#[cfg(test)]
+mod tests;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use self::colour::{ChromaLocation, ColorSpace, Planes, Range, SampleType};
+pub use self::device::{DeviceInfo, check_device, device_count, device_info};
+pub use self::display::DisplayModel;
+pub use self::distmap::DistortionMap;
+pub use self::error::VshipError;
+pub use self::metric::{Butteraugli, ButteraugliScore, Cvvdp, CvvdpOptions};
