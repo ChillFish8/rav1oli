@@ -1,4 +1,5 @@
 mod cache;
+mod decoder;
 mod lock;
 
 use std::path::{Path, PathBuf};
