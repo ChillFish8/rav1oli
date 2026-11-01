@@ -1,0 +1,13 @@
+[package]
+name = "rav1oli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+description = "Distortion map driven two pass encoding with SVT-AV1 and FFVship."
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
