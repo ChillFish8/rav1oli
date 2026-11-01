@@ -4,6 +4,55 @@ vcpkg_triplet := env("RAV1OLI_VCPKG_TRIPLET", if os() == "macos" { "arm64-osx-re
 format:
     cargo +nightly fmt --all
 
+# Builds the workspace, fetching submodules and static deps when missing.
+#
+# Takes `--static`, `--release`, and `--vulkan` or `--cuda` for the static Vship backend, Vulkan by default.
+build *FLAGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    is_static=false
+    profile_flag=""
+    vship_backend=""
+    for flag in {{FLAGS}}; do
+        case "$flag" in
+            --static) is_static=true ;;
+            --release) profile_flag="--release" ;;
+            --vulkan | --cuda)
+                if [ -n "$vship_backend" ] && [ "$vship_backend" != "${flag#--}" ]; then
+                    echo "--vulkan and --cuda cannot be used together" >&2
+                    exit 1
+                fi
+                vship_backend="${flag#--}"
+                ;;
+            *) echo "unknown flag $flag, expected --static, --release, --vulkan or --cuda" >&2; exit 1 ;;
+        esac
+    done
+
+    if [ -n "$vship_backend" ] && [ "$is_static" = false ]; then
+        echo "--$vship_backend only applies to a --static build" >&2
+        exit 1
+    fi
+
+    if git submodule status --recursive | grep -q '^-'; then
+        just submodules
+    fi
+
+    if [ "$is_static" = false ]; then
+        cargo build --workspace $profile_flag
+        exit 0
+    fi
+
+    prefix="$PWD/vcpkg_installed/{{vcpkg_triplet}}"
+    marker="$prefix/lib/pkgconfig/bestsource.pc"
+    if [ ! -f "$marker" ] || [ -n "$(find vcpkg.json vcpkg/ports -newer "$marker")" ]; then
+        just static-deps
+    fi
+
+    export BESTSOURCE_LIB_DIR="$prefix/lib"
+    export PKG_CONFIG_PATH="$prefix/lib/pkgconfig"
+    features="rav1oli-bestsource/static,rav1oli-vship/static,rav1oli-vship/${vship_backend:-vulkan}"
+    cargo build --workspace $profile_flag --features "$features"
+
 clippy:
     cargo clippy
 
