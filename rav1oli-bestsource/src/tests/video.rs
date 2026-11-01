@@ -135,3 +135,42 @@ fn a_beside_source_cache_writes_the_index_next_to_the_file() {
     let index = folder.path().join("clip.mkv.0.bsindex");
     assert!(index.exists(), "no index at {}", index.display());
 }
+
+#[test]
+fn an_exact_index_path_is_written_and_reused() {
+    let folder = tempfile::tempdir().expect("a temp dir");
+    let source = folder.path().join("clip.mkv");
+    let fixture = fixture();
+    std::fs::copy(fixture, &source).expect("copies the fixture");
+    let indexes = folder.path().join("indexes");
+    std::fs::create_dir(&indexes).expect("creates the index dir");
+    let options = OpenOptions {
+        cache: IndexCache::File(indexes.join("custom")),
+        ..OpenOptions::default()
+    };
+
+    let first = VideoSource::open(&source, &options).expect("first open");
+    drop(first);
+    let found = custom_indexes(&indexes);
+    assert_eq!(found.len(), 1, "{found:?}");
+    let written_at = modified(&found[0]);
+
+    let second = VideoSource::open(&source, &options).expect("second open");
+    drop(second);
+
+    let reused = custom_indexes(&indexes);
+    assert_eq!(reused.len(), 1, "{reused:?}");
+    assert_eq!(modified(&reused[0]), written_at);
+}
+
+fn custom_indexes(directory: &Path) -> Vec<PathBuf> {
+    let entries = std::fs::read_dir(directory).expect("reads the index dir");
+
+    entries
+        .map(|entry| entry.expect("a dir entry").path())
+        .filter(|path| {
+            let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("");
+            name.starts_with("custom.") && name.ends_with(".bsindex")
+        })
+        .collect()
+}

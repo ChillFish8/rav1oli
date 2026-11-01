@@ -25,6 +25,8 @@ pub enum IndexCache {
     BesideSource,
     /// Written to `<directory>/<source path>.<track>.bsindex` and read back on later opens.
     Directory(PathBuf),
+    /// Written to `<path>.<track>.bsindex` and read back on later opens.
+    File(PathBuf),
 }
 
 /// How [VideoSource::open](crate::VideoSource::open) picks and decodes a track.
@@ -96,12 +98,14 @@ impl VideoSource {
         let source_path = c_path(path)?;
         let cache_path = match &options.cache {
             IndexCache::Directory(directory) => Some(c_path(directory)?),
+            IndexCache::File(stem) => Some(c_path(stem)?),
             IndexCache::Disabled | IndexCache::BesideSource => None,
         };
         let cache_mode = match &options.cache {
             IndexCache::Disabled => CACHE_MODE_DISABLED,
             IndexCache::BesideSource => CACHE_MODE_ALWAYS_WRITE_ABSOLUTE,
             IndexCache::Directory(_) => CACHE_MODE_ALWAYS_WRITE_SUBTREE,
+            IndexCache::File(_) => CACHE_MODE_ALWAYS_WRITE_ABSOLUTE,
         };
         let cache_pointer = match &cache_path {
             Some(cache_path) => cache_path.as_ptr(),

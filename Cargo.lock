@@ -780,7 +780,10 @@ name = "rav1oli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "blake3",
  "clap",
+ "rav1oli-bestsource",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
 ]

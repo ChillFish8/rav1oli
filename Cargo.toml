@@ -29,3 +29,5 @@ blake3 = { version = "1.8", features = ["mmap"] }
 clap = { version = "4", features = ["derive", "env"] }
 parquet = { version = "60.1", default-features = false, features = ["arrow", "zstd"] }
 serde = { version = "1", features = ["derive"] }
+
+rav1oli-bestsource = { path = "rav1oli-bestsource" }

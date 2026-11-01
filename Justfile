@@ -53,8 +53,8 @@ build *FLAGS:
     features="rav1oli-bestsource/static,rav1oli-vship/static,rav1oli-vship/${vship_backend:-vulkan}"
     cargo build --workspace $profile_flag --features "$features"
 
-clippy:
-    cargo clippy
+clippy *ARGS:
+    cargo clippy {{ARGS}}
 
 run *ARGS:
     cargo run --release -- {{ARGS}}
@@ -62,6 +62,10 @@ run *ARGS:
 # Fetches the vendored Vship, BestSource and libp2p sources at their pinned commits.
 submodules:
     git submodule update --init --recursive
+
+# Runs tests with nextest, passing any extra arguments through.
+test *ARGS:
+    cargo nextest run {{ARGS}}
 
 # Lints and tests the Vship wrapper built statically from its submodule with Vulkan.
 test-vship:

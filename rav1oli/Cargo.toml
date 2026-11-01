@@ -8,6 +8,12 @@ description = "Distortion map driven two pass encoding with SVT-AV1 and FFVship.
 
 [dependencies]
 anyhow = { workspace = true }
+blake3 = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+rav1oli-bestsource = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

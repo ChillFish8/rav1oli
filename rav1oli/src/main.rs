@@ -1,4 +1,6 @@
 mod commands;
+#[cfg_attr(not(test), expect(dead_code, reason = "not wired into commands yet"))]
+mod decode;
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 
