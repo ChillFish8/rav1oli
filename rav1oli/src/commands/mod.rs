@@ -2,6 +2,8 @@ mod analyse;
 mod encode;
 mod options;
 mod run;
+#[cfg(test)]
+mod tests;
 
 use clap::Subcommand;
 

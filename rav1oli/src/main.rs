@@ -1,5 +1,5 @@
 mod commands;
-#[cfg_attr(not(test), expect(dead_code, reason = "not wired into commands yet"))]
+#[cfg_attr(not(test), expect(dead_code, reason = "the decoder is only used by tests"))]
 mod decode;
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};

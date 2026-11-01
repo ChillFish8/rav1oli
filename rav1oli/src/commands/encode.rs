@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 
-use super::options::EncoderOptions;
+use super::options::{CacheOptions, EncoderOptions};
 
 #[derive(Debug, Args)]
 pub struct EncodeArgs {
@@ -18,6 +18,9 @@ pub struct EncodeArgs {
 
     #[command(flatten)]
     pub encoder: EncoderOptions,
+
+    #[command(flatten)]
+    pub cache: CacheOptions,
 }
 
 pub fn execute(args: EncodeArgs) -> anyhow::Result<()> {

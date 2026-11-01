@@ -1,5 +1,9 @@
+use std::path::PathBuf;
+
 use clap::error::ErrorKind;
 use clap::{Args, ValueEnum};
+
+use crate::decode::CacheLocation;
 
 /// The metric used to measure distortion in the first pass.
 #[derive(Debug, Copy, Clone, Default, Eq, PartialEq, ValueEnum)]
@@ -43,4 +47,21 @@ pub struct EncoderOptions {
     /// Extra parameters passed directly to SVT-AV1.
     #[arg(long, allow_hyphen_values = true)]
     pub svt_params: Option<String>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct CacheOptions {
+    /// Where to keep indexes and locks, instead of a .rav1oli folder next to each video.
+    #[arg(long)]
+    pub cache_dir: Option<PathBuf>,
+}
+
+impl CacheOptions {
+    #[cfg_attr(not(test), expect(dead_code, reason = "only used by tests"))]
+    pub fn location(&self) -> CacheLocation {
+        match &self.cache_dir {
+            Some(path) => CacheLocation::Directory(path.clone()),
+            None => CacheLocation::BesideVideo,
+        }
+    }
 }

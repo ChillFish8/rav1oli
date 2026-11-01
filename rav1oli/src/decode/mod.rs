@@ -4,7 +4,6 @@ mod lock;
 #[cfg(test)]
 mod tests;
 
-#[expect(unused_imports, reason = "not wired into commands yet")]
 pub use self::cache::CacheLocation;
-#[expect(unused_imports, reason = "not wired into commands yet")]
+#[expect(unused_imports, reason = "the decoder is only used by tests")]
 pub use self::decoder::{Decoder, Frames};
