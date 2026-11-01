@@ -2,7 +2,7 @@
 resolver = "3"
 members = [
     "rav1oli", "rav1oli-bestsource",
-    "rav1oli-svt",
+    "rav1oli-svt", "rav1oli-table",
     "rav1oli-vship"
 ]
 
@@ -14,13 +14,18 @@ edition = "2024"
 
 [workspace.dependencies]
 anyhow = "1"
+arrow-array = "60.1"
+arrow-schema = "60.1"
 bindgen = "0.73"
 cc = "1.2"
 pkg-config = "0.3"
+serde_json = "1"
 tempfile = "3"
 thiserror = "2.0.21"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
+blake3 = { version = "1.8", features = ["mmap"] }
 clap = { version = "4", features = ["derive", "env"] }
-
+parquet = { version = "60.1", default-features = false, features = ["arrow", "zstd"] }
+serde = { version = "1", features = ["derive"] }
