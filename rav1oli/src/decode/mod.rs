@@ -1,4 +1,5 @@
 mod cache;
+mod lock;
 #[cfg(test)]
 mod tests;
 
