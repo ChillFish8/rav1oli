@@ -8,7 +8,8 @@ use std::path::Path;
 /// `shaderNameToByteCode`, in file name order so the output is reproducible.
 pub fn write_shader_header(shader_dir: &Path, output: &Path) -> io::Result<()> {
     let mut names = Vec::new();
-    for entry in fs::read_dir(shader_dir)? {
+    let entries = fs::read_dir(shader_dir)?;
+    for entry in entries {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if name != ".gitkeep" {
@@ -32,7 +33,8 @@ pub fn write_shader_header(shader_dir: &Path, output: &Path) -> io::Result<()> {
 
         for byte in bytecode {
             let signed = i8::from_ne_bytes([byte]);
-            header.push_str(&signed.to_string());
+            let value = signed.to_string();
+            header.push_str(&value);
             header.push(',');
         }
 

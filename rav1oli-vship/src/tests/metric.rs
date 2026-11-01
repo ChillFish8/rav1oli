@@ -1,12 +1,4 @@
-use crate::tests::support::{
-    SIZE,
-    butteraugli,
-    color_space,
-    distorted_frame,
-    gpu_id,
-    planes,
-    reference_frame,
-};
+use super::support::{SIZE, butteraugli, color_space, distorted_frame, gpu_id, planes, reference_frame};
 use crate::{Butteraugli, device_count, device_info};
 
 #[test]
@@ -23,9 +15,7 @@ fn vship_lists_a_named_device() {
 fn identical_frames_score_0_on_butteraugli() {
     let reference = reference_frame();
     let reference_planes = planes(&reference);
-    let gpu_id = gpu_id();
-    let mut metric =
-        Butteraugli::new(color_space(), color_space(), 2, 203.0, gpu_id).expect("makes the metric");
+    let mut metric = butteraugli();
 
     let score = metric
         .compute(&reference_planes, &reference_planes)
@@ -40,9 +30,7 @@ fn a_distorted_frame_scores_higher_on_butteraugli() {
     let distorted = distorted_frame();
     let reference_planes = planes(&reference);
     let distorted_planes = planes(&distorted);
-    let gpu_id = gpu_id();
-    let mut metric =
-        Butteraugli::new(color_space(), color_space(), 2, 203.0, gpu_id).expect("makes the metric");
+    let mut metric = butteraugli();
 
     let score = metric
         .compute(&reference_planes, &distorted_planes)
@@ -55,9 +43,11 @@ fn a_distorted_frame_scores_higher_on_butteraugli() {
 #[test]
 fn a_device_past_the_last_is_an_error() {
     let count = device_count().expect("counts devices");
+    let reference_space = color_space();
+    let distorted_space = color_space();
 
-    let error =
-        Butteraugli::new(color_space(), color_space(), 2, 203.0, count).expect_err("a missing device worked");
+    let error = Butteraugli::new(reference_space, distorted_space, 2, 203.0, count)
+        .expect_err("a missing device worked");
 
     assert_ne!(error.code(), 0);
     assert!(!error.message().is_empty());

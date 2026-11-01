@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::tests::video::open_fixture;
+use super::video::open_fixture;
 use crate::{ColorFamily, PlanarTarget, PlaneTarget};
 
 const WIDTH: usize = 64;
@@ -58,7 +58,8 @@ fn the_first_frame_matches_ffmpegs_decode() {
     let mut actual = y_plane;
     actual.extend_from_slice(&u_plane);
     actual.extend_from_slice(&v_plane);
-    assert_eq!(actual, expected_frame0());
+    let expected = expected_frame0();
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -101,6 +102,7 @@ fn a_frame_outlives_its_source() {
     let mut source = open_fixture();
     let frame = source.frame(0).expect("decodes frame 0");
     drop(source);
+
     let mut y_plane = vec![0u8; WIDTH * 64];
     let mut u_plane = vec![0u8; CHROMA_WIDTH * 32];
     let mut v_plane = vec![0u8; CHROMA_WIDTH * 32];

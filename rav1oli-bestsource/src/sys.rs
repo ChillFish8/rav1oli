@@ -73,7 +73,7 @@ unsafe extern "C" {
     pub(crate) fn bs_video_properties(video: *const BsVideo, out_props: *mut BsVideoProps);
     pub(crate) fn bs_video_frame(
         video: *mut BsVideo,
-        n: i64,
+        index: i64,
         out_frame: *mut *mut BsFrame,
         error: *mut c_char,
         error_len: usize,

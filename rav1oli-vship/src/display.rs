@@ -54,7 +54,8 @@ impl DisplayModel {
 
         let trimmed = json.trim_start();
         if !trimmed.starts_with('{') {
-            return Err(not_inline_json_error());
+            let error = not_inline_json_error();
+            return Err(error);
         }
 
         Ok(())
@@ -71,9 +72,13 @@ impl DisplayModel {
 
     /// The model key and config Vship's init takes.
     pub(crate) fn c_strings(&self) -> Result<DisplayStrings, VshipError> {
-        let key = c_string(self.key(), "display name")?;
+        let key = self.key();
+        let key = c_string(key, "display name")?;
         let config = match self.config() {
-            Some(config) => Some(c_string(config, "display config")?),
+            Some(config) => {
+                let converted = c_string(config, "display config")?;
+                Some(converted)
+            },
             None => None,
         };
 
@@ -102,10 +107,7 @@ impl DisplayStrings {
 }
 
 fn c_string(text: &str, name: &str) -> Result<CString, VshipError> {
-    match CString::new(text) {
-        Ok(converted) => Ok(converted),
-        Err(_) => Err(nul_byte_error(name)),
-    }
+    CString::new(text).map_err(|_| nul_byte_error(name))
 }
 
 fn not_inline_json_error() -> VshipError {
@@ -113,7 +115,8 @@ fn not_inline_json_error() -> VshipError {
 }
 
 fn nul_byte_error(name: &str) -> VshipError {
-    VshipError::new(format!("the {name} carries a nul byte, which vship cannot take"))
+    let message = format!("the {name} carries a nul byte, which vship cannot take");
+    VshipError::new(message)
 }
 
 #[cfg(test)]
@@ -157,7 +160,8 @@ mod tests {
         ];
 
         for (model, key) in expected {
-            assert_eq!(key_of(&model), key);
+            let actual = key_of(&model);
+            assert_eq!(actual, key);
         }
     }
 
@@ -175,14 +179,13 @@ mod tests {
         ];
 
         for (model, key) in expected {
+            let actual = key_of(&model);
             let config = config_of(&model);
+            let quoted_key = format!("\"{key}\"");
 
-            assert_eq!(key_of(&model), key);
+            assert_eq!(actual, key);
             assert_eq!(config, TRIX_CONFIG);
-            assert!(
-                config.contains(&format!("\"{key}\"")),
-                "{key} is missing from the config"
-            );
+            assert!(config.contains(&quoted_key), "{key} is missing from the config");
         }
     }
 
@@ -197,8 +200,9 @@ mod tests {
     fn a_custom_model_passes_its_name_and_config() {
         let model = custom("my_display", "{}");
         let strings = model.c_strings().expect("converts the model");
+        let key = key_of(&model);
 
-        assert_eq!(key_of(&model), "my_display");
+        assert_eq!(key, "my_display");
         assert!(!strings.config_pointer().is_null());
     }
 

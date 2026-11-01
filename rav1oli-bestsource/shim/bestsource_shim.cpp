@@ -101,13 +101,13 @@ extern "C" void bs_video_properties(const bs_video *video, bs_video_props *out_p
     fill_format(properties.VF, &out_props->format);
 }
 
-extern "C" int bs_video_frame(bs_video *video, int64_t n, bs_frame **out_frame, char *error, size_t error_len) {
+extern "C" int bs_video_frame(bs_video *video, int64_t index, bs_frame **out_frame, char *error, size_t error_len) {
     return guarded(error, error_len, [&] {
         BestVideoSource *source = as_source(video);
-        BestVideoFrame *frame = source->GetFrame(n);
+        BestVideoFrame *frame = source->GetFrame(index);
         if (frame == nullptr) {
             std::string num_frames = std::to_string(source->GetVideoProperties().NumFrames);
-            throw std::out_of_range("frame " + std::to_string(n) + " is not one of the source's " + num_frames +
+            throw std::out_of_range("frame " + std::to_string(index) + " is not one of the source's " + num_frames +
                                     " frames");
         }
 

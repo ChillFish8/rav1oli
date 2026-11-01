@@ -94,34 +94,41 @@ impl VideoSource {
     /// Opens a video track of `path`, indexing it or loading a cached index.
     pub fn open(path: &Path, options: &OpenOptions) -> Result<Self, BestSourceError> {
         let source_path = c_path(path)?;
-        let (cache_mode, cache_path) = match &options.cache {
-            IndexCache::Disabled => (CACHE_MODE_DISABLED, None),
-            IndexCache::BesideSource => (CACHE_MODE_ALWAYS_WRITE_ABSOLUTE, None),
-            IndexCache::Directory(directory) => (CACHE_MODE_ALWAYS_WRITE_SUBTREE, Some(c_path(directory)?)),
+        let cache_path = match &options.cache {
+            IndexCache::Directory(directory) => Some(c_path(directory)?),
+            IndexCache::Disabled | IndexCache::BesideSource => None,
+        };
+        let cache_mode = match &options.cache {
+            IndexCache::Disabled => CACHE_MODE_DISABLED,
+            IndexCache::BesideSource => CACHE_MODE_ALWAYS_WRITE_ABSOLUTE,
+            IndexCache::Directory(_) => CACHE_MODE_ALWAYS_WRITE_SUBTREE,
         };
         let cache_pointer = match &cache_path {
             Some(cache_path) => cache_path.as_ptr(),
             None => ptr::null(),
         };
 
+        let source_pointer = source_path.as_ptr();
         let mut raw = ptr::null_mut();
         let mut error = [0u8; ERROR_BUFFER_LEN];
-        // SAFETY: Both paths are NUL terminated and outlive the call. `raw` and `error` are valid
-        // out pointers and `error.len()` is the buffer's real size.
+        let error_pointer = error.as_mut_ptr().cast();
+        // SAFETY: Both paths are NUL terminated and outlive the call. `raw` and `error_pointer` are
+        // valid out pointers and `ERROR_BUFFER_LEN` is the buffer's real size.
         let status = unsafe {
             sys::bs_video_open(
-                source_path.as_ptr(),
+                source_pointer,
                 options.track,
                 options.threads,
                 cache_mode,
                 cache_pointer,
                 &raw mut raw,
-                error.as_mut_ptr().cast(),
-                error.len(),
+                error_pointer,
+                ERROR_BUFFER_LEN,
             )
         };
         if status != 0 {
-            return Err(BestSourceError::from_buffer(&error));
+            let error = BestSourceError::from_buffer(&error);
+            return Err(error);
         }
 
         let mut raw_properties = sys::BsVideoProps::default();
@@ -136,16 +143,18 @@ impl VideoSource {
         &self.properties
     }
 
-    /// Decodes frame `n`, counting from zero.
-    pub fn frame(&mut self, n: i64) -> Result<Frame, BestSourceError> {
+    /// Decodes the frame at `index`, counting from zero.
+    pub fn frame(&mut self, index: i64) -> Result<Frame, BestSourceError> {
         let mut raw = ptr::null_mut();
         let mut error = [0u8; ERROR_BUFFER_LEN];
+        let error_pointer = error.as_mut_ptr().cast();
         // SAFETY: `self.raw` is live and borrowed mutably, so nothing else decodes at once. `raw` and
-        // `error` are valid out pointers and `error.len()` is the buffer's real size.
+        // `error_pointer` are valid out pointers and `ERROR_BUFFER_LEN` is the buffer's real size.
         let status =
-            unsafe { sys::bs_video_frame(self.raw, n, &raw mut raw, error.as_mut_ptr().cast(), error.len()) };
+            unsafe { sys::bs_video_frame(self.raw, index, &raw mut raw, error_pointer, ERROR_BUFFER_LEN) };
         if status != 0 {
-            return Err(BestSourceError::from_buffer(&error));
+            let error = BestSourceError::from_buffer(&error);
+            return Err(error);
         }
 
         // SAFETY: The shim handed over a live frame that only the returned `Frame` frees.
@@ -165,26 +174,23 @@ impl Drop for VideoSource {
 /// Converts a path for BestSource, which needs UTF-8 with no NUL byte.
 fn c_path(path: &Path) -> Result<CString, BestSourceError> {
     let Some(text) = path.to_str() else {
-        return Err(non_utf8_path_error(path));
+        let error = non_utf8_path_error(path);
+        return Err(error);
     };
 
-    match CString::new(text) {
-        Ok(converted) => Ok(converted),
-        Err(_) => Err(nul_path_error(text)),
-    }
+    CString::new(text).map_err(|_| nul_path_error(text))
 }
 
 fn non_utf8_path_error(path: &Path) -> BestSourceError {
-    BestSourceError::new(format!(
-        "{} is not valid utf-8, which bestsource requires",
-        path.display()
-    ))
+    let display = path.display();
+    let message = format!("{display} is not valid utf-8, which bestsource requires");
+
+    BestSourceError::new(message)
 }
 
 fn nul_path_error(text: &str) -> BestSourceError {
     let printable = text.replace('\0', "\\0");
+    let message = format!("{printable} carries a nul byte, which bestsource cannot take");
 
-    BestSourceError::new(format!(
-        "{printable} carries a nul byte, which bestsource cannot take"
-    ))
+    BestSourceError::new(message)
 }

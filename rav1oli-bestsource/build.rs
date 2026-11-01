@@ -48,9 +48,8 @@ fn main() {
 
 /// Builds and links nothing, so only a library build of this crate can succeed.
 fn skip(reason: &str) {
-    println!(
-        "cargo:warning=BestSource is not linked because {reason}. Anything that links rav1oli-bestsource will fail to link."
-    );
+    let consequence = "Anything that links rav1oli-bestsource will fail to link.";
+    println!("cargo:warning=BestSource is not linked because {reason}. {consequence}");
 }
 
 /// Whether the vendored BestSource and libp2p submodules have their sources.
@@ -73,7 +72,8 @@ fn link_static() {
     let lib_dir = env::var_os("BESTSOURCE_LIB_DIR");
     let Some(lib_dir) = lib_dir else {
         skip(
-            "BESTSOURCE_LIB_DIR is unset, run `just static-deps` and point it at vcpkg_installed/<triplet>/lib",
+            "BESTSOURCE_LIB_DIR is unset, run `just static-deps` and point it at \
+             vcpkg_installed/<triplet>/lib",
         );
         return;
     };
@@ -111,8 +111,10 @@ fn link_dynamic() {
         .iter()
         .flat_map(|library| library.include_paths.iter().cloned())
         .collect();
-    include_paths.push(PathBuf::from("vendor/bestsource/src"));
-    include_paths.push(PathBuf::from("vendor/libp2p"));
+    let bestsource_dir = PathBuf::from("vendor/bestsource/src");
+    let libp2p_dir = PathBuf::from("vendor/libp2p");
+    include_paths.push(bestsource_dir);
+    include_paths.push(libp2p_dir);
 
     // Archives are linked in the order they compile, and each one only refers to those after it.
     compile_shim(&include_paths);

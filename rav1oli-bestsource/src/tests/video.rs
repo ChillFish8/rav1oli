@@ -114,7 +114,8 @@ fn a_directory_cache_writes_an_index_and_reuses_it() {
     let second = VideoSource::open(&fixture, &options).expect("second open");
     drop(second);
 
-    assert_eq!(modified(&index), written_at);
+    let reused_at = modified(&index);
+    assert_eq!(reused_at, written_at);
 }
 
 #[test]

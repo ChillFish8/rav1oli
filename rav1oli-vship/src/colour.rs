@@ -125,8 +125,10 @@ impl ColorSpace {
         } else {
             (width, height)
         };
-        let Some(row_bytes) = plane_width.checked_mul(self.sample.bytes_per_sample()) else {
-            return Err(plane_too_large_error(index));
+        let sample_bytes = self.sample.bytes_per_sample();
+        let Some(row_bytes) = plane_width.checked_mul(sample_bytes) else {
+            let error = plane_too_large_error(index);
+            return Err(error);
         };
 
         Ok((row_bytes, plane_height))
@@ -149,18 +151,19 @@ impl Planes<'_> {
             let length = self.data[index].len();
 
             if stride < row_bytes {
-                return Err(narrow_stride_error(name, index, stride, row_bytes));
+                let error = narrow_stride_error(name, index, stride, row_bytes);
+                return Err(error);
             }
 
             let needed = required_len(stride, row_bytes, rows);
             let Some(needed) = needed else {
-                return Err(VshipError::new(format!(
-                    "{name} plane {index} is too large to address"
-                )));
+                let error = frame_plane_too_large_error(name, index);
+                return Err(error);
             };
 
             if length < needed {
-                return Err(short_plane_error(name, index, length, needed));
+                let error = short_plane_error(name, index, length, needed);
+                return Err(error);
             }
         }
 
@@ -179,14 +182,7 @@ impl Planes<'_> {
         let mut line_sizes = [0i64; 3];
 
         for (index, stride) in self.strides.iter().enumerate() {
-            line_sizes[index] = match i64::try_from(*stride) {
-                Ok(converted) => converted,
-                Err(_) => {
-                    return Err(VshipError::new(format!(
-                        "a stride of {stride} bytes is too large"
-                    )));
-                },
-            };
+            line_sizes[index] = i64::try_from(*stride).map_err(|_| large_stride_error(*stride))?;
         }
 
         Ok(line_sizes)
@@ -210,45 +206,61 @@ fn size_rounded_up(size: usize, shift: u32) -> usize {
 }
 
 fn subsampling_shift(value: i32) -> Result<u32, VshipError> {
-    match u32::try_from(value) {
+    let shift = u32::try_from(value);
+    match shift {
         Ok(shift) if shift <= 2 => Ok(shift),
-        _ => Err(unsupported_subsampling_error(value)),
+        _ => {
+            let error = unsupported_subsampling_error(value);
+            Err(error)
+        },
+    }
+}
+
+fn dimension(value: i64) -> Result<usize, VshipError> {
+    let converted = usize::try_from(value);
+    match converted {
+        Ok(converted) if converted >= 1 => Ok(converted),
+        _ => {
+            let error = size_below_one_error(value);
+            Err(error)
+        },
     }
 }
 
 fn unsupported_subsampling_error(value: i32) -> VshipError {
-    VshipError::new(format!(
-        "a subsampling of {value} is not supported. It must be between 0 and 2."
-    ))
+    let message = format!("a subsampling of {value} is not supported. It must be between 0 and 2.");
+    VshipError::new(message)
 }
 
 fn plane_too_large_error(index: usize) -> VshipError {
-    VshipError::new(format!("plane {index} is too large to address"))
+    let message = format!("plane {index} is too large to address");
+    VshipError::new(message)
 }
 
-fn dimension(value: i64) -> Result<usize, VshipError> {
-    match usize::try_from(value) {
-        Ok(converted) if converted >= 1 => Ok(converted),
-        _ => Err(size_below_one_error(value)),
-    }
+fn frame_plane_too_large_error(name: &str, index: usize) -> VshipError {
+    let message = format!("{name} plane {index} is too large to address");
+    VshipError::new(message)
+}
+
+fn large_stride_error(stride: usize) -> VshipError {
+    let message = format!("a stride of {stride} bytes is too large");
+    VshipError::new(message)
 }
 
 fn size_below_one_error(value: i64) -> VshipError {
-    VshipError::new(format!(
-        "the colour space has a size of {value}, which is below 1"
-    ))
+    let message = format!("the colour space has a size of {value}, which is below 1");
+    VshipError::new(message)
 }
 
 fn narrow_stride_error(name: &str, index: usize, stride: usize, row_bytes: usize) -> VshipError {
-    VshipError::new(format!(
-        "{name} plane {index} has a stride of {stride} bytes, below its {row_bytes} byte rows"
-    ))
+    let message =
+        format!("{name} plane {index} has a stride of {stride} bytes, below its {row_bytes} byte rows");
+    VshipError::new(message)
 }
 
 fn short_plane_error(name: &str, index: usize, length: usize, needed: usize) -> VshipError {
-    VshipError::new(format!(
-        "{name} plane {index} holds {length} bytes but needs {needed}"
-    ))
+    let message = format!("{name} plane {index} holds {length} bytes but needs {needed}");
+    VshipError::new(message)
 }
 
 #[cfg(test)]

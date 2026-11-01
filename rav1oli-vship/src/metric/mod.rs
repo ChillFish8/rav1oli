@@ -19,17 +19,22 @@ struct FramePair<'a> {
 fn check_matching_sizes(reference: &ColorSpace, distorted: &ColorSpace) -> Result<(), VshipError> {
     let same_size = reference.width == distorted.width && reference.height == distorted.height;
     if !same_size {
-        return Err(mismatched_sizes_error(reference, distorted));
+        let error = mismatched_sizes_error(reference, distorted);
+        return Err(error);
     }
 
     Ok(())
 }
 
 fn mismatched_sizes_error(reference: &ColorSpace, distorted: &ColorSpace) -> VshipError {
-    VshipError::new(format!(
-        "the reference is {} by {} but the distorted frame is {} by {}",
-        reference.width, reference.height, distorted.width, distorted.height
-    ))
+    let (reference_width, reference_height) = (reference.width, reference.height);
+    let (distorted_width, distorted_height) = (distorted.width, distorted.height);
+    let message = format!(
+        "the reference is {reference_width} by {reference_height} but the distorted frame is \
+         {distorted_width} by {distorted_height}"
+    );
+
+    VshipError::new(message)
 }
 
 #[cfg(test)]

@@ -34,8 +34,9 @@ pub fn device_info(gpu_id: i32) -> Result<DeviceInfo, VshipError> {
     let mut info = unsafe { raw_info.assume_init() };
     let last = info.name.len() - 1;
     info.name[last] = 0;
+    let name_pointer = info.name.as_ptr();
     // SAFETY: The last byte of `name` was just set to NUL, so the string ends inside the array.
-    let name = unsafe { CStr::from_ptr(info.name.as_ptr()) };
+    let name = unsafe { CStr::from_ptr(name_pointer) };
 
     Ok(DeviceInfo {
         name: name.to_string_lossy().into_owned(),

@@ -15,13 +15,16 @@ impl MapSize {
         let converted_width = usize::try_from(width);
         let converted_height = usize::try_from(height);
         let (Ok(map_width), Ok(map_height)) = (converted_width, converted_height) else {
-            return Err(unusable_size_error(width, height));
+            let error = unusable_size_error(width, height);
+            return Err(error);
         };
 
+        let sample_bytes = size_of::<f32>();
         let pixels = map_width.checked_mul(map_height);
-        let bytes = pixels.and_then(|pixel_count| pixel_count.checked_mul(size_of::<f32>()));
+        let bytes = pixels.and_then(|pixel_count| pixel_count.checked_mul(sample_bytes));
         if bytes.is_none() {
-            return Err(unusable_size_error(width, height));
+            let error = unusable_size_error(width, height);
+            return Err(error);
         }
 
         Ok(Self {
@@ -67,21 +70,27 @@ impl DistortionMap {
     /// The pointer and byte stride Vship writes through, once the map is checked against `size`.
     pub(crate) fn target(&mut self, size: MapSize) -> Result<(*const u8, i64), VshipError> {
         if self.width != size.width || self.height != size.height {
-            return Err(wrong_size_error(self.width, self.height, size));
+            let error = wrong_size_error(self.width, self.height, size);
+            return Err(error);
         }
 
         let expected_len = self.width * self.height;
-        if self.data.len() != expected_len {
-            return Err(wrong_length_error(self.data.len(), expected_len));
+        let length = self.data.len();
+        if length != expected_len {
+            let error = wrong_length_error(length, expected_len);
+            return Err(error);
         }
 
-        let stride_bytes = self.width.checked_mul(size_of::<f32>());
+        let sample_bytes = size_of::<f32>();
+        let stride_bytes = self.width.checked_mul(sample_bytes);
         let Some(stride_bytes) = stride_bytes else {
-            return Err(stride_too_large_error(self.width));
+            let error = stride_too_large_error(self.width);
+            return Err(error);
         };
 
         let Ok(stride) = i64::try_from(stride_bytes) else {
-            return Err(stride_too_large_error(self.width));
+            let error = stride_too_large_error(self.width);
+            return Err(error);
         };
 
         let pointer = self.data.as_mut_ptr().cast::<u8>().cast_const();
@@ -91,28 +100,31 @@ impl DistortionMap {
 }
 
 fn unusable_size_error(width: i64, height: i64) -> VshipError {
-    VshipError::new(format!(
-        "vship reported a distortion map size of {width} by {height}, which cannot be used"
-    ))
+    let message =
+        format!("vship reported a distortion map size of {width} by {height}, which cannot be used");
+    VshipError::new(message)
 }
 
 fn wrong_size_error(width: usize, height: usize, size: MapSize) -> VshipError {
-    VshipError::new(format!(
-        "the distortion map is {width} by {height} but the metric writes {} by {}",
-        size.width, size.height
-    ))
+    let MapSize {
+        width: metric_width,
+        height: metric_height,
+    } = size;
+    let message = format!(
+        "the distortion map is {width} by {height} but the metric writes {metric_width} by {metric_height}"
+    );
+
+    VshipError::new(message)
 }
 
 fn wrong_length_error(length: usize, expected: usize) -> VshipError {
-    VshipError::new(format!(
-        "the distortion map holds {length} values but needs {expected}"
-    ))
+    let message = format!("the distortion map holds {length} values but needs {expected}");
+    VshipError::new(message)
 }
 
 fn stride_too_large_error(width: usize) -> VshipError {
-    VshipError::new(format!(
-        "a distortion map {width} values wide is too large to address"
-    ))
+    let message = format!("a distortion map {width} values wide is too large to address");
+    VshipError::new(message)
 }
 
 #[cfg(test)]

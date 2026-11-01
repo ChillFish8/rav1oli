@@ -59,7 +59,7 @@ int bs_video_open(const char *path, int track, int threads, int cache_mode, cons
                   bs_video **out_video, char *error, size_t error_len);
 void bs_video_free(bs_video *video);
 void bs_video_properties(const bs_video *video, bs_video_props *out_props);
-int bs_video_frame(bs_video *video, int64_t n, bs_frame **out_frame, char *error, size_t error_len);
+int bs_video_frame(bs_video *video, int64_t index, bs_frame **out_frame, char *error, size_t error_len);
 
 void bs_frame_info(const bs_frame *frame, bs_frame_props *out_props);
 int bs_frame_export_planar(const bs_frame *frame, uint8_t *const planes[3], const ptrdiff_t strides[3],

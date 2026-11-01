@@ -26,7 +26,8 @@ impl CvvdpOptions {
     fn check(&self) -> Result<(), VshipError> {
         let usable_fps = self.fps.is_finite() && self.fps > 0.0 && self.fps <= MAX_FPS;
         if !usable_fps {
-            return Err(unusable_fps_error(self.fps));
+            let error = unusable_fps_error(self.fps);
+            return Err(error);
         }
 
         self.display.check()
@@ -154,9 +155,8 @@ impl Cvvdp {
 }
 
 fn unusable_fps_error(fps: f32) -> VshipError {
-    VshipError::new(format!(
-        "cvvdp needs a frame rate above 0 and at most {MAX_FPS}, not {fps}"
-    ))
+    let message = format!("cvvdp needs a frame rate above 0 and at most {MAX_FPS}, not {fps}");
+    VshipError::new(message)
 }
 
 #[cfg(test)]

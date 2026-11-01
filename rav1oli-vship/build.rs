@@ -123,13 +123,15 @@ fn out_dir() -> PathBuf {
 
 fn is_windows_target() -> bool {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+
     target_os == "windows"
 }
 
 /// Builds Vship's Vulkan backend with its SPIR-V shaders embedded, then links the Vulkan loader.
 fn compile_vulkan() {
     let vulkan_sdk = env::var_os("VULKAN_SDK").map(PathBuf::from);
-    let include_dirs = vulkan_include_dirs(vulkan_sdk.as_deref());
+    let vulkan_sdk = vulkan_sdk.as_deref();
+    let include_dirs = vulkan_include_dirs(vulkan_sdk);
     let found_headers = has_vulkan_headers(&include_dirs);
     if !found_headers {
         skip("no Vulkan headers were found, install them or set VULKAN_SDK");
@@ -167,7 +169,7 @@ fn compile_vulkan() {
 
     build.file(VSHIP_SOURCE).compile("vship");
 
-    link_vulkan_loader(vulkan_sdk.as_deref());
+    link_vulkan_loader(vulkan_sdk);
 }
 
 /// The include dirs that may hold the Vulkan headers, from `VULKAN_SDK` or pkg-config.
@@ -290,7 +292,7 @@ fn find_nvcc() -> Option<PathBuf> {
 
     let path = env::var_os("PATH")?;
     env::split_paths(&path)
-        .map(|dir| dir.join(&nvcc_name))
+        .map(|directory| directory.join(&nvcc_name))
         .find(|nvcc| nvcc.is_file())
 }
 

@@ -3,7 +3,7 @@ use crate::{Butteraugli, ChromaLocation, ColorSpace, Planes, Range, SampleType, 
 pub(crate) const SIZE: usize = 256;
 
 pub(crate) fn gpu_id() -> i32 {
-    let selector = std::env::var("AVTB_DEVICE").unwrap_or_default();
+    let selector = std::env::var("RAV1OLI_DEVICE").unwrap_or_default();
     let (kind, ordinal) = selector.split_once(':').unwrap_or((selector.as_str(), "0"));
     let wants_integrated = match kind {
         "discrete" => false,
@@ -11,7 +11,7 @@ pub(crate) fn gpu_id() -> i32 {
         _ => return 0,
     };
 
-    let ordinal: usize = ordinal.parse().expect("AVTB_DEVICE has a numeric ordinal");
+    let ordinal: usize = ordinal.parse().expect("RAV1OLI_DEVICE has a numeric ordinal");
 
     let count = device_count().expect("counts devices");
     let matching: Vec<i32> = (0..count)
@@ -23,7 +23,7 @@ pub(crate) fn gpu_id() -> i32 {
 
     *matching
         .get(ordinal)
-        .expect("AVTB_DEVICE names a device Vship lists")
+        .expect("RAV1OLI_DEVICE names a device Vship lists")
 }
 
 pub(crate) fn color_space() -> ColorSpace {

@@ -32,19 +32,20 @@ impl VshipError {
 
     fn last(code: sys::Vship_Exception) -> Self {
         let mut buffer = [0u8; MESSAGE_BUFFER_LEN];
-        let buffer_len = c_int::try_from(buffer.len()).unwrap_or(c_int::MAX);
+        let buffer_pointer = buffer.as_mut_ptr().cast();
+        let buffer_len = c_int::try_from(MESSAGE_BUFFER_LEN).unwrap_or(c_int::MAX);
         // SAFETY: The buffer is writable for `buffer_len` bytes.
-        unsafe { sys::Vship_GetDetailedLastError(buffer.as_mut_ptr().cast(), buffer_len) };
+        unsafe { sys::Vship_GetDetailedLastError(buffer_pointer, buffer_len) };
 
         Self::from_buffer(code, &buffer)
     }
 
     fn last_for_handler(handle: sys::Vship_Handle, code: sys::Vship_Exception) -> Self {
         let mut buffer = [0u8; MESSAGE_BUFFER_LEN];
-        let buffer_len = c_int::try_from(buffer.len()).unwrap_or(c_int::MAX);
+        let buffer_pointer = buffer.as_mut_ptr().cast();
+        let buffer_len = c_int::try_from(MESSAGE_BUFFER_LEN).unwrap_or(c_int::MAX);
         // SAFETY: The buffer is writable for `buffer_len` bytes and `handle` is a live handler.
-        let written =
-            unsafe { sys::Vship_GetDetailedLastErrorHandler(handle, buffer.as_mut_ptr().cast(), buffer_len) };
+        let written = unsafe { sys::Vship_GetDetailedLastErrorHandler(handle, buffer_pointer, buffer_len) };
         if written == 0 {
             return Self::last(code);
         }
@@ -56,10 +57,8 @@ impl VshipError {
         let text = message_from_buffer(buffer);
 
         if text.is_empty() {
-            return Self {
-                code,
-                message: format!("vship error {code}"),
-            };
+            let message = format!("vship error {code}");
+            return Self { code, message };
         }
 
         Self { code, message: text }
@@ -72,7 +71,8 @@ pub(crate) fn check(status: sys::Vship_Exception) -> Result<(), VshipError> {
         return Ok(());
     }
 
-    Err(VshipError::last(status))
+    let error = VshipError::last(status);
+    Err(error)
 }
 
 /// Turns a Vship status into a result, reading the message recorded on `handle` on failure.
@@ -86,7 +86,8 @@ pub(crate) fn check_handler(
         return Ok(());
     }
 
-    Err(VshipError::last_for_handler(handle, status))
+    let error = VshipError::last_for_handler(handle, status);
+    Err(error)
 }
 
 /// Reads a message up to the first NUL byte, replacing invalid UTF-8.

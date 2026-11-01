@@ -136,23 +136,27 @@ impl Frame {
             _ => (ptr::null_mut(), 0),
         };
 
+        let planes_pointer = planes.as_ptr();
+        let strides_pointer = strides.as_ptr();
         let mut error = [0u8; ERROR_BUFFER_LEN];
+        let error_pointer = error.as_mut_ptr().cast();
         // SAFETY: `check_target` proved every plane, and the alpha plane when it is passed, holds the
-        // rows BestSource writes for this frame. The pointers outlive the call and `error.len()` is
-        // the buffer's real size.
+        // rows BestSource writes for this frame. The pointers outlive the call and `ERROR_BUFFER_LEN`
+        // is the buffer's real size.
         let status = unsafe {
             sys::bs_frame_export_planar(
                 self.raw,
-                planes.as_ptr(),
-                strides.as_ptr(),
+                planes_pointer,
+                strides_pointer,
                 alpha,
                 alpha_stride,
-                error.as_mut_ptr().cast(),
-                error.len(),
+                error_pointer,
+                ERROR_BUFFER_LEN,
             )
         };
         if status != 0 {
-            return Err(BestSourceError::from_buffer(&error));
+            let error = BestSourceError::from_buffer(&error);
+            return Err(error);
         }
 
         Ok(())
@@ -161,13 +165,14 @@ impl Frame {
     fn check_target(&self, format: &VideoFormat, target: &PlanarTarget) -> Result<(), BestSourceError> {
         let plane_count = format.plane_count();
         if plane_count == 0 {
-            return Err(BestSourceError::new(
-                "the frame's colour family has no planar layout",
-            ));
+            let error = BestSourceError::new("the frame's colour family has no planar layout");
+            return Err(error);
         }
 
-        if target.planes.len() != plane_count {
-            return Err(plane_count_error(plane_count, target.planes.len()));
+        let given_count = target.planes.len();
+        if given_count != plane_count {
+            let error = plane_count_error(plane_count, given_count);
+            return Err(error);
         }
 
         let width = dimension(self.props.ss_mod_width)?;
@@ -177,7 +182,8 @@ impl Frame {
             let name = format!("plane {index}");
             let extent = format.plane_extent(index > 0, width, height);
             let Some((row_bytes, rows)) = extent else {
-                return Err(plane_extent_error(&name));
+                let error = plane_extent_error(&name);
+                return Err(error);
             };
             check_plane(plane, row_bytes, rows, &name)?;
         }
@@ -187,7 +193,8 @@ impl Frame {
         {
             let extent = format.plane_extent(false, width, height);
             let Some((row_bytes, rows)) = extent else {
-                return Err(plane_extent_error("the alpha plane"));
+                let error = plane_extent_error("the alpha plane");
+                return Err(error);
             };
             check_plane(alpha, row_bytes, rows, "the alpha plane")?;
         }
@@ -210,16 +217,20 @@ fn check_plane(
     name: &str,
 ) -> Result<(), BestSourceError> {
     if plane.stride < row_bytes {
-        return Err(narrow_stride_error(name, plane.stride, row_bytes));
+        let error = narrow_stride_error(name, plane.stride, row_bytes);
+        return Err(error);
     }
 
     let needed = required_len(plane.stride, row_bytes, rows);
     let Some(needed) = needed else {
-        return Err(BestSourceError::new(format!("{name} is too large to address")));
+        let error = plane_too_large_error(name);
+        return Err(error);
     };
 
-    if plane.data.len() < needed {
-        return Err(short_plane_error(name, plane.data.len(), needed));
+    let length = plane.data.len();
+    if length < needed {
+        let error = short_plane_error(name, length, needed);
+        return Err(error);
     }
 
     Ok(())
@@ -237,39 +248,44 @@ fn required_len(stride: usize, row_bytes: usize, rows: usize) -> Option<usize> {
 }
 
 fn dimension(value: i32) -> Result<usize, BestSourceError> {
-    match usize::try_from(value) {
-        Ok(converted) => Ok(converted),
-        Err(_) => Err(BestSourceError::new(format!(
-            "the frame has a negative size of {value}"
-        ))),
-    }
+    usize::try_from(value).map_err(|_| negative_size_error(value))
 }
 
 fn stride_to_isize(stride: usize) -> Result<isize, BestSourceError> {
-    match isize::try_from(stride) {
-        Ok(converted) => Ok(converted),
-        Err(_) => Err(BestSourceError::new(format!(
-            "a stride of {stride} bytes is too large"
-        ))),
-    }
+    isize::try_from(stride).map_err(|_| large_stride_error(stride))
+}
+
+fn negative_size_error(value: i32) -> BestSourceError {
+    let message = format!("the frame has a negative size of {value}");
+    BestSourceError::new(message)
+}
+
+fn large_stride_error(stride: usize) -> BestSourceError {
+    let message = format!("a stride of {stride} bytes is too large");
+    BestSourceError::new(message)
+}
+
+fn plane_too_large_error(name: &str) -> BestSourceError {
+    let message = format!("{name} is too large to address");
+    BestSourceError::new(message)
 }
 
 fn plane_extent_error(name: &str) -> BestSourceError {
-    BestSourceError::new(format!(
-        "{name} is too large to address or has an invalid subsampling"
-    ))
+    let message = format!("{name} is too large to address or has an invalid subsampling");
+    BestSourceError::new(message)
 }
 
 fn plane_count_error(expected: usize, given: usize) -> BestSourceError {
-    BestSourceError::new(format!("the frame has {expected} planes but {given} were given"))
+    let message = format!("the frame has {expected} planes but {given} were given");
+    BestSourceError::new(message)
 }
 
 fn narrow_stride_error(name: &str, stride: usize, row_bytes: usize) -> BestSourceError {
-    BestSourceError::new(format!(
-        "{name} has a stride of {stride} bytes, below its {row_bytes} byte rows"
-    ))
+    let message = format!("{name} has a stride of {stride} bytes, below its {row_bytes} byte rows");
+    BestSourceError::new(message)
 }
 
 fn short_plane_error(name: &str, length: usize, needed: usize) -> BestSourceError {
-    BestSourceError::new(format!("{name} holds {length} bytes but needs {needed}"))
+    let message = format!("{name} holds {length} bytes but needs {needed}");
+    BestSourceError::new(message)
 }

@@ -1,4 +1,4 @@
-use crate::tests::support::{SIZE, color_space, distorted_frame, gpu_id, planes, reference_frame};
+use super::support::{SIZE, color_space, distorted_frame, gpu_id, planes, reference_frame};
 use crate::{Cvvdp, CvvdpOptions, DisplayModel, Planes};
 
 const FRAMES: usize = 5;
@@ -22,6 +22,7 @@ fn cvvdp_with(display: DisplayModel) -> Cvvdp {
 
 fn cvvdp() -> Cvvdp {
     let display = DisplayModel::default();
+
     cvvdp_with(display)
 }
 

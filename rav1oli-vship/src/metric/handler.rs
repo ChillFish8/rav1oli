@@ -45,6 +45,10 @@ impl Handler {
         frames: &FramePair,
     ) -> Result<(), VshipError> {
         let mut inputs = FrameInputs::checked(frames)?;
+        let reference_pointers = inputs.reference_pointers.as_mut_ptr();
+        let distorted_pointers = inputs.distorted_pointers.as_mut_ptr();
+        let reference_lines = inputs.reference_lines.as_ptr();
+        let distorted_lines = inputs.distorted_lines.as_ptr();
 
         // SAFETY: Both plane sets were checked against the colour spaces the handler was made with, so
         // Vship reads only inside them. The caller guarantees `score`, and every pointer outlives the
@@ -53,10 +57,10 @@ impl Handler {
             sys::Vship_ComputeHandler(
                 self.handle,
                 score,
-                inputs.reference_pointers.as_mut_ptr(),
-                inputs.distorted_pointers.as_mut_ptr(),
-                inputs.reference_lines.as_ptr(),
-                inputs.distorted_lines.as_ptr(),
+                reference_pointers,
+                distorted_pointers,
+                reference_lines,
+                distorted_lines,
             )
         };
 
@@ -66,16 +70,20 @@ impl Handler {
     /// Adds a frame pair to a temporal metric's history without scoring it.
     pub(super) fn load_temporal(&mut self, frames: &FramePair) -> Result<(), VshipError> {
         let mut inputs = FrameInputs::checked(frames)?;
+        let reference_pointers = inputs.reference_pointers.as_mut_ptr();
+        let distorted_pointers = inputs.distorted_pointers.as_mut_ptr();
+        let reference_lines = inputs.reference_lines.as_ptr();
+        let distorted_lines = inputs.distorted_lines.as_ptr();
 
         // SAFETY: Both plane sets were checked against the colour spaces the handler was made with, so
         // Vship reads only inside them, and every pointer outlives the call.
         let status = unsafe {
             sys::Vship_LoadTemporalCVVDP2(
                 self.handle,
-                inputs.reference_pointers.as_mut_ptr(),
-                inputs.distorted_pointers.as_mut_ptr(),
-                inputs.reference_lines.as_ptr(),
-                inputs.distorted_lines.as_ptr(),
+                reference_pointers,
+                distorted_pointers,
+                reference_lines,
+                distorted_lines,
             )
         };
 
