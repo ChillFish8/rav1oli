@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, SystemTime};
 use std::{fs, thread};
@@ -8,13 +8,15 @@ use crate::decode::cache::CacheLocation;
 use crate::decode::decoder::Decoder;
 use crate::decode::lock::IndexLock;
 
-fn index_files(directory: &Path) -> Vec<std::path::PathBuf> {
+fn index_files(directory: &Path) -> Vec<PathBuf> {
     let indexes = directory.join(".rav1oli").join("indexes");
     let entries = fs::read_dir(indexes).unwrap();
-    entries
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "bsindex"))
-        .collect()
+    let paths = entries.map(|entry| entry.unwrap().path());
+    let is_index = |path: &PathBuf| {
+        let extension = path.extension();
+        extension.is_some_and(|extension| extension == "bsindex")
+    };
+    paths.filter(is_index).collect()
 }
 
 fn modified_time(path: &Path) -> SystemTime {
@@ -112,7 +114,7 @@ fn open_waits_for_a_held_index_lock() {
     let lock = IndexLock::acquire(&paths.lock).unwrap();
 
     let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
+    let opener = thread::spawn(move || {
         let result = Decoder::open(&video, &CacheLocation::BesideVideo);
         sender.send(result.is_ok()).unwrap();
     });
@@ -124,4 +126,5 @@ fn open_waits_for_a_held_index_lock() {
 
     let late = receiver.recv_timeout(Duration::from_secs(5));
     assert_eq!(late, Ok(true));
+    opener.join().unwrap();
 }

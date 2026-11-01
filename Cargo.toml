@@ -25,7 +25,7 @@ thiserror = "2.0.21"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
-blake3 = { version = "1.8", features = ["mmap"] }
+blake3 = { version = "1.8", features = ["mmap", "rayon"] }
 clap = { version = "4", features = ["derive", "env"] }
 parquet = { version = "60.1", default-features = false, features = ["arrow", "zstd"] }
 serde = { version = "1", features = ["derive"] }

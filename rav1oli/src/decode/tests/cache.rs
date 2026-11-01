@@ -54,7 +54,8 @@ fn the_stem_is_the_file_name_and_a_content_hash() {
             .all(|character| matches!(character, '0'..='9' | 'a'..='f'))
     );
     let lock_name = paths.lock.file_name().unwrap().to_str().unwrap();
-    assert_eq!(lock_name, format!("{stem}.lock"));
+    let expected_lock_name = format!("{stem}.lock");
+    assert_eq!(lock_name, expected_lock_name);
 }
 
 #[test]
@@ -81,8 +82,11 @@ fn identical_names_in_different_folders_with_different_contents_do_not_collide()
     fs::write(second_folder.join("clip.mkv"), b"second").unwrap();
     let location = CacheLocation::Directory(dir.path().join("cache"));
 
-    let first = location.paths_for(&first_folder.join("clip.mkv")).unwrap();
-    let second = location.paths_for(&second_folder.join("clip.mkv")).unwrap();
+    let first_video = first_folder.join("clip.mkv");
+    let second_video = second_folder.join("clip.mkv");
+
+    let first = location.paths_for(&first_video).unwrap();
+    let second = location.paths_for(&second_video).unwrap();
 
     assert_ne!(first.index, second.index);
     assert_ne!(first.lock, second.lock);
@@ -104,6 +108,7 @@ fn a_missing_video_names_the_video() {
 
     let message = format!("{error:#}");
     assert!(message.contains("missing.mkv"));
+    assert!(!message.contains("hash"));
 }
 
 #[test]
@@ -149,5 +154,36 @@ fn a_read_only_folder_beside_the_video_suggests_cache_dir() {
     let cache_folder = folder.join(".rav1oli");
     let cache_folder = cache_folder.display().to_string();
     assert!(message.contains(&cache_folder));
+    assert!(message.contains("--cache-dir"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_read_only_existing_indexes_folder_suggests_cache_dir() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let video = copy_fixture(dir.path());
+    let cache = dir.path().join(".rav1oli");
+    let indexes = cache.join("indexes");
+    let locks = cache.join("locks");
+    fs::create_dir_all(&indexes).unwrap();
+    fs::create_dir_all(&locks).unwrap();
+    let read_only = fs::Permissions::from_mode(0o555);
+    let writable = fs::Permissions::from_mode(0o755);
+    fs::set_permissions(&indexes, read_only).unwrap();
+    let probe = indexes.join("probe");
+    if fs::write(&probe, b"x").is_ok() {
+        fs::set_permissions(&indexes, writable).unwrap();
+        return;
+    }
+
+    let result = CacheLocation::BesideVideo.paths_for(&video);
+    fs::set_permissions(&indexes, writable).unwrap();
+
+    let error = result.unwrap_err();
+    let message = format!("{error:#}");
+    let indexes_name = indexes.display().to_string();
+    assert!(message.contains(&indexes_name));
     assert!(message.contains("--cache-dir"));
 }
