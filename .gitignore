@@ -5,3 +5,4 @@
 .claude/
 /.vcpkg
 /vcpkg_installed
+/scratchpad
