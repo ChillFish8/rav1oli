@@ -128,3 +128,21 @@ fn open_waits_for_a_held_index_lock() {
     assert_eq!(late, Ok(true));
     opener.join().unwrap();
 }
+
+#[test]
+fn open_uncached_writes_no_index() {
+    let dir = tempfile::tempdir().unwrap();
+    let video = copy_fixture(dir.path());
+
+    let uncached = Decoder::open_uncached(&video).unwrap();
+
+    assert!(!dir.path().join(".rav1oli").exists());
+    let has_index = fs::read_dir(dir.path()).unwrap().any(|entry| {
+        let path = entry.unwrap().path();
+        path.extension().is_some_and(|extension| extension == "bsindex")
+    });
+    assert!(!has_index);
+
+    let cached = Decoder::open(&video, &CacheLocation::BesideVideo).unwrap();
+    assert_eq!(uncached.properties().num_frames, cached.properties().num_frames);
+}

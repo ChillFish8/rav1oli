@@ -33,6 +33,18 @@ impl Decoder {
         Ok(Decoder { source })
     }
 
+    /// Opens the video without reading or writing an index file.
+    pub fn open_uncached(video: &Path) -> anyhow::Result<Decoder> {
+        let options = OpenOptions {
+            cache: IndexCache::Disabled,
+            ..Default::default()
+        };
+
+        let context = || format!("could not open the video {}", video.display());
+        let source = VideoSource::open(video, &options).with_context(context)?;
+        Ok(Decoder { source })
+    }
+
     pub fn properties(&self) -> &VideoProperties {
         self.source.properties()
     }
