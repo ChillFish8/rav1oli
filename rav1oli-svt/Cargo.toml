@@ -11,6 +11,7 @@ include = [
     "build/**",
     "src/**",
     "include/**",
+    "shim/**",
     "vendor/svt-av1/LICENSE*",
     "vendor/svt-av1/PATENTS*",
     "vendor/svt-av1/CMakeLists.txt",
@@ -23,6 +24,10 @@ include = [
 [dependencies]
 libc = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [build-dependencies]
 bindgen = { workspace = true }

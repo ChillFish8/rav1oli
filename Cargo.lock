@@ -887,7 +887,9 @@ dependencies = [
  "cc",
  "cmake",
  "libc",
+ "tempfile",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

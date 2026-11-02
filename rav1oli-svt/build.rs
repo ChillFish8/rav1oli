@@ -17,6 +17,7 @@ fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=build");
     println!("cargo::rerun-if-changed=include");
+    println!("cargo::rerun-if-changed=shim");
     println!("cargo::rerun-if-changed=vendor/svt-av1/Source");
     println!("cargo::rerun-if-changed=vendor/svt-av1/CMakeLists.txt");
     println!("cargo::rerun-if-changed=vendor/svt-av1/cmake");
@@ -63,10 +64,24 @@ fn main() {
     let release_flags_path = out_dir.join("svt-release-flags.txt");
     library::write_release_flags(&install_dir, &release_flags_path);
 
+    // The shim calls into SVT, so it must come before SVT on the link line.
+    compile_log_shim(&clang);
     link_svt(&install_dir);
 
     let bindings_path = out_dir.join("bindings.rs");
     bindings::generate_bindings(&bindings_path);
+}
+
+/// Compiles the C helper that formats SVT's `va_list` log messages, which stable Rust cannot read.
+fn compile_log_shim(clang: &Path) {
+    let api_dir = Path::new(library::SVT_SOURCE).join("Source").join("API");
+
+    cc::Build::new()
+        .compiler(clang)
+        .include("include")
+        .include(api_dir)
+        .file("shim/log_format.c")
+        .compile("rav1oli_svt_shim");
 }
 
 /// Links the static SVT library and the system libraries its CMake links.

@@ -1,7 +1,7 @@
 use std::path::Path;
 
-/// The items bindgen keeps from the fork's API headers.
-const ALLOWLIST: [&str; 5] = ["svt_.*", "Eb.*", "Svt.*", "SVT_.*", "EB_.*"];
+/// The items bindgen keeps from the fork's API headers and the log helper.
+const ALLOWLIST: [&str; 6] = ["svt_.*", "Eb.*", "Svt.*", "SVT_.*", "EB_.*", "rav1oli_.*"];
 
 /// Generates the bindings to SVT's encoder API into `output`.
 pub fn generate_bindings(output: &Path) {

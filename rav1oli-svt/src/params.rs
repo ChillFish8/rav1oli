@@ -3,7 +3,7 @@ use std::mem::MaybeUninit;
 use std::ptr;
 
 use crate::error::ParamError;
-use crate::sys;
+use crate::{logging, sys};
 
 /// Every name the fork's parser accepts, aliases included.
 ///
@@ -190,7 +190,7 @@ const ENCODER_OWNED: &[&str] = &[
     "chroma-sample-position",
 ];
 
-const SVT_SUCCESS: sys::EbErrorType = sys::EB_ErrorNone;
+pub(crate) const SVT_SUCCESS: sys::EbErrorType = sys::EB_ErrorNone;
 
 /// Every long name the fork's parser accepts.
 pub fn param_names() -> &'static [&'static str] {
@@ -305,7 +305,12 @@ fn strip_dashes(token: &str) -> Option<&str> {
     Some(without_short)
 }
 
-fn parse_one(config: &mut sys::EbSvtAv1EncConfiguration, name: &str, value: &str) -> Result<(), ParamError> {
+/// Applies one `name` and `value` pair through SVT's parser.
+pub(crate) fn parse_one(
+    config: &mut sys::EbSvtAv1EncConfiguration,
+    name: &str,
+    value: &str,
+) -> Result<(), ParamError> {
     let rejected = || ParamError::Rejected {
         name: name.to_string(),
         value: value.to_string(),
@@ -330,7 +335,8 @@ fn parse_one(config: &mut sys::EbSvtAv1EncConfiguration, name: &str, value: &str
 
 /// A default config together with the handle that produced it, released on drop.
 ///
-/// Dropping also frees the lists and strings that SVT allocates into the config while parsing flags.
+/// Dropping also frees the lists and strings that SVT allocates into the config while parsing flags. The
+/// handle goes first, as an encoder set up from the config keeps pointing at its zones.
 pub(crate) struct DefaultConfig {
     handle: *mut sys::EbComponentType,
     pub(crate) config: sys::EbSvtAv1EncConfiguration,
@@ -338,6 +344,8 @@ pub(crate) struct DefaultConfig {
 
 impl DefaultConfig {
     pub(crate) fn new() -> Result<Self, ParamError> {
+        logging::install();
+
         let mut handle: *mut sys::EbComponentType = ptr::null_mut();
         let mut config = MaybeUninit::<sys::EbSvtAv1EncConfiguration>::zeroed();
 
@@ -352,16 +360,24 @@ impl DefaultConfig {
 
         Ok(Self { handle, config })
     }
+
+    pub(crate) fn handle(&self) -> *mut sys::EbComponentType {
+        self.handle
+    }
 }
 
 impl Drop for DefaultConfig {
     fn drop(&mut self) {
+        // SAFETY: The handle came from `svt_av1_enc_init_handle` and is released exactly once.
+        unsafe { sys::svt_av1_enc_deinit_handle(self.handle) };
+
         let scale_events = &mut self.config.frame_scale_evts;
         let s_frames = &mut self.config.sframe_posi;
 
         // SAFETY: The fork allocates each of these with plain `malloc` or `strdup` while parsing flags,
-        // and nothing else owns them. The build always defines `NDEBUG`, so SVT keeps no allocation
-        // tracker that bypassing its free macro would upset. Each is null or freed once and then nulled.
+        // and nothing else owns them once the handle is released. The build always defines `NDEBUG`, so
+        // SVT keeps no allocation tracker that bypassing its free macro would upset. Each is null or freed
+        // once and then nulled.
         unsafe {
             free_pointer(&mut scale_events.start_frame_nums);
             free_pointer(&mut scale_events.resize_kf_denoms);
@@ -372,9 +388,6 @@ impl Drop for DefaultConfig {
             free_pointer(&mut self.config.zones);
             free_pointer(&mut self.config.parsed_zones);
         }
-
-        // SAFETY: The handle came from `svt_av1_enc_init_handle` and is released exactly once.
-        unsafe { sys::svt_av1_enc_deinit_handle(self.handle) };
     }
 }
 
