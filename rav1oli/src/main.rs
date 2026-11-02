@@ -4,6 +4,11 @@ mod decode;
 mod interrupt;
 mod metrics;
 mod progress;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the encode command will use the tables")
+)]
+mod tables;
 mod video;
 
 use std::io::IsTerminal;

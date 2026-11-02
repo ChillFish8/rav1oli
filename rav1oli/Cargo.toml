@@ -15,6 +15,7 @@ blake3 = { workspace = true }
 clap = { workspace = true }
 ctrlc = { workspace = true }
 indicatif = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 strsim = { workspace = true }
 tempfile = { workspace = true }

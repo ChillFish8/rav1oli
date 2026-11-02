@@ -968,6 +968,7 @@ dependencies = [
  "rav1oli-svt",
  "rav1oli-table",
  "rav1oli-vship",
+ "serde",
  "serde_json",
  "strsim",
  "tempfile",
