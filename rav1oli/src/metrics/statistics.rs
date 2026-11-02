@@ -7,6 +7,11 @@ pub fn summarise(values: &[f64]) -> anyhow::Result<Statistics> {
         bail!("cannot summarise an empty set of values");
     }
 
+    let non_finite = values.iter().enumerate().find(|(_, value)| !value.is_finite());
+    if let Some((index, value)) = non_finite {
+        bail!("cannot summarise value {index}, it is {value} rather than a finite number");
+    }
+
     let mut sorted = values.to_vec();
     sorted.sort_by(f64::total_cmp);
 

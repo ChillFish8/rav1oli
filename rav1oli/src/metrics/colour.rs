@@ -2,11 +2,77 @@ use anyhow::{Context, bail};
 use rav1oli_bestsource::{ColorFamily, Frame, PlanarTarget, PlaneTarget};
 use rav1oli_vship::{ChromaLocation, ColorSpace, Planes, Range, SampleType};
 
+/// The tallest frame FFVship still treats as standard definition.
+const STANDARD_DEFINITION_HEIGHT: i64 = 650;
+
+const UNSPECIFIED: i32 = 2;
+
+const SUPPORTED_MATRICES: [i32; 9] = [1, 5, 6, 8, 9, 10, 14, 16, 17];
+const SUPPORTED_TRANSFERS: [i32; 10] = [1, 4, 5, 6, 7, 8, 13, 16, 17, 18];
+const SUPPORTED_PRIMARIES: [i32; 7] = [1, 4, 5, 6, 7, 9, 12];
+
+/// H.273 names of the unsupported matrices, for clearer errors.
+const UNSUPPORTED_MATRIX_NAMES: [(i32, &str); 5] = [
+    (4, "FCC"),
+    (7, "SMPTE 240M"),
+    (11, "SMPTE 2085"),
+    (12, "chromaticity-derived non-constant"),
+    (13, "chromaticity-derived constant"),
+];
+
+/// H.273 names of the unsupported transfers, for clearer errors.
+const UNSUPPORTED_TRANSFER_NAMES: [(i32, &str); 5] = [
+    (3, "reserved"),
+    (9, "log 100:1"),
+    (10, "log 316:1"),
+    (11, "IEC 61966-2-4"),
+    (12, "BT.1361"),
+];
+
+/// H.273 names of the unsupported primaries, for clearer errors.
+const UNSUPPORTED_PRIMARIES_NAMES: [(i32, &str); 4] = [
+    (8, "generic film"),
+    (10, "CIE 1931 XYZ"),
+    (11, "SMPTE 431"),
+    (22, "EBU Tech 3213"),
+];
+
+const MATRIX_BT709: u32 = 1;
+const MATRIX_BT470_BG: u32 = 5;
+const MATRIX_BT2020_NCL: u32 = 9;
+const MATRIX_BT2020_CL: u32 = 10;
+const MATRIX_ICTCP: u32 = 14;
+
+const TRANSFER_BT709: i32 = 1;
+const TRANSFER_BT470_BG: i32 = 5;
+const TRANSFER_SRGB: i32 = 13;
+const TRANSFER_PQ: i32 = 16;
+const TRANSFER_BT2020_10_BIT: i32 = 14;
+const TRANSFER_BT2020_12_BIT: i32 = 15;
+
+const PRIMARIES_BT709: i32 = 1;
+const PRIMARIES_BT470_BG: i32 = 5;
+const PRIMARIES_BT2020: i32 = 9;
+
+const RANGE_UNSPECIFIED: i32 = 0;
+const RANGE_LIMITED: i32 = 1;
+const RANGE_FULL: i32 = 2;
+
+const CHROMA_LOCATION_UNSPECIFIED: i32 = 0;
+const CHROMA_LOCATION_LEFT: i32 = 1;
+const CHROMA_LOCATION_CENTER: i32 = 2;
+const CHROMA_LOCATION_TOP_LEFT: i32 = 3;
+const CHROMA_LOCATION_TOP: i32 = 4;
+const CHROMA_LOCATION_BOTTOM_LEFT: i32 = 5;
+const CHROMA_LOCATION_BOTTOM: i32 = 6;
+
 /// The layout and colour of a decoded frame, in the numbering BestSource reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameDescription {
     pub width: i64,
     pub height: i64,
+    /// The height before rounding down to whole chroma rows.
+    pub encoded_height: i64,
     pub family: ColorFamily,
     pub bits: i32,
     pub float: bool,
@@ -27,6 +93,7 @@ impl FrameDescription {
         Self {
             width: i64::from(frame.ss_mod_width()),
             height: i64::from(frame.ss_mod_height()),
+            encoded_height: i64::from(frame.height()),
             family: format.color_family,
             bits: format.bits,
             float: format.float,
@@ -40,38 +107,115 @@ impl FrameDescription {
         }
     }
 
+    /// Describes how `other` differs from this description, if it differs at all.
+    pub fn difference(&self, other: &Self) -> Option<String> {
+        if let Some(difference) = self.layout_difference(other) {
+            return Some(difference);
+        }
+
+        let fields = [
+            ("encoded height", self.encoded_height, other.encoded_height),
+            ("matrix", i64::from(self.matrix), i64::from(other.matrix)),
+            ("transfer", i64::from(self.transfer), i64::from(other.transfer)),
+            ("primaries", i64::from(self.primaries), i64::from(other.primaries)),
+            ("range", i64::from(self.range), i64::from(other.range)),
+            (
+                "chroma location",
+                i64::from(self.chroma_location),
+                i64::from(other.chroma_location),
+            ),
+        ];
+        let changed = fields
+            .into_iter()
+            .find(|(_, expected, actual)| expected != actual);
+        let (name, expected, actual) = changed?;
+
+        let message = format!("{name} is {actual} but expected {expected}");
+        Some(message)
+    }
+
     fn layout_difference(&self, other: &Self) -> Option<String> {
         if self.width != other.width || self.height != other.height {
-            return Some(format!(
-                "size is {}x{} but expected {}x{}",
-                other.width, other.height, self.width, self.height,
-            ));
+            let (width, height) = (other.width, other.height);
+            let (expected_width, expected_height) = (self.width, self.height);
+            let message = format!("size is {width}x{height} but expected {expected_width}x{expected_height}");
+            return Some(message);
         }
 
         if self.family != other.family {
-            return Some(format!(
-                "colour family is {:?} but expected {:?}",
-                other.family, self.family,
-            ));
+            let (family, expected) = (other.family, self.family);
+            let message = format!("colour family is {family:?} but expected {expected:?}");
+            return Some(message);
         }
 
         if self.bits != other.bits {
-            return Some(format!("bit depth is {} but expected {}", other.bits, self.bits,));
+            let message = format!("bit depth is {} but expected {}", other.bits, self.bits);
+            return Some(message);
         }
 
         if self.float != other.float {
-            return Some(format!("float is {} but expected {}", other.float, self.float,));
+            let message = format!("float is {} but expected {}", other.float, self.float);
+            return Some(message);
         }
 
         let actual = (other.sub_sampling_w, other.sub_sampling_h);
         let expected = (self.sub_sampling_w, self.sub_sampling_h);
         if actual != expected {
-            return Some(format!(
-                "chroma subsampling is {actual:?} but expected {expected:?}",
-            ));
+            let message = format!("chroma subsampling is {actual:?} but expected {expected:?}");
+            return Some(message);
         }
 
         None
+    }
+}
+
+/// A colour field checked against what Vship supports.
+#[derive(Debug, Clone, Copy)]
+enum ColourField {
+    Matrix,
+    Transfer,
+    Primaries,
+}
+
+impl ColourField {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Matrix => "matrix",
+            Self::Transfer => "transfer",
+            Self::Primaries => "primaries",
+        }
+    }
+
+    fn supported(self) -> &'static [i32] {
+        match self {
+            Self::Matrix => &SUPPORTED_MATRICES,
+            Self::Transfer => &SUPPORTED_TRANSFERS,
+            Self::Primaries => &SUPPORTED_PRIMARIES,
+        }
+    }
+
+    fn unsupported_names(self) -> &'static [(i32, &'static str)] {
+        match self {
+            Self::Matrix => &UNSUPPORTED_MATRIX_NAMES,
+            Self::Transfer => &UNSUPPORTED_TRANSFER_NAMES,
+            Self::Primaries => &UNSUPPORTED_PRIMARIES_NAMES,
+        }
+    }
+
+    fn check(self, value: i32) -> anyhow::Result<i32> {
+        if self.supported().contains(&value) {
+            return Ok(value);
+        }
+
+        let field = self.name();
+        let known = self
+            .unsupported_names()
+            .iter()
+            .find(|(known_value, _)| *known_value == value);
+        match known {
+            Some((_, name)) => bail!("the {field} {value} ({name}) is not supported"),
+            None => bail!("the {field} {value} is not supported"),
+        }
     }
 }
 
@@ -93,77 +237,6 @@ fn sample_type(description: &FrameDescription) -> anyhow::Result<SampleType> {
     Ok(sample)
 }
 
-const SUPPORTED_MATRICES: [i32; 9] = [1, 5, 6, 8, 9, 10, 14, 16, 17];
-const SUPPORTED_TRANSFERS: [i32; 10] = [1, 4, 5, 6, 7, 8, 13, 16, 17, 18];
-const SUPPORTED_PRIMARIES: [i32; 7] = [1, 4, 5, 6, 7, 9, 12];
-
-fn h273_name(field: &str, value: i32) -> Option<&'static str> {
-    let name = match (field, value) {
-        ("matrix", 4) => "FCC",
-        ("matrix", 7) => "SMPTE 240M",
-        ("matrix", 11) => "SMPTE 2085",
-        ("matrix", 12) => "chromaticity-derived non-constant",
-        ("matrix", 13) => "chromaticity-derived constant",
-        ("transfer", 3) => "reserved",
-        ("transfer", 9) => "log 100:1",
-        ("transfer", 10) => "log 316:1",
-        ("transfer", 11) => "IEC 61966-2-4",
-        ("transfer", 12) => "BT.1361",
-        ("primaries", 8) => "generic film",
-        ("primaries", 10) => "CIE 1931 XYZ",
-        ("primaries", 11) => "SMPTE 431",
-        ("primaries", 22) => "EBU Tech 3213",
-        _ => return None,
-    };
-
-    Some(name)
-}
-
-fn check_supported(field: &str, value: i32, supported: &[i32]) -> anyhow::Result<i32> {
-    if supported.contains(&value) {
-        return Ok(value);
-    }
-
-    match h273_name(field, value) {
-        Some(name) => bail!("the {field} {value} ({name}) is not supported"),
-        None => bail!("the {field} {value} is not supported"),
-    }
-}
-
-/// The tallest frame FFVship still treats as standard definition.
-const STANDARD_DEFINITION_HEIGHT: i64 = 650;
-
-const UNSPECIFIED: i32 = 2;
-
-const MATRIX_BT709: u32 = 1;
-const MATRIX_BT470_BG: u32 = 5;
-const MATRIX_BT2020_NCL: u32 = 9;
-const MATRIX_BT2020_CL: u32 = 10;
-const MATRIX_ICTCP: u32 = 14;
-
-const TRANSFER_BT709: i32 = 1;
-const TRANSFER_BT470_BG: i32 = 5;
-const TRANSFER_SRGB: i32 = 13;
-const TRANSFER_PQ: i32 = 16;
-const TRANSFER_BT2020_10_BIT: i32 = 14;
-const TRANSFER_BT2020_12_BIT: i32 = 15;
-
-const RANGE_UNSPECIFIED: i32 = 0;
-const RANGE_LIMITED: i32 = 1;
-const RANGE_FULL: i32 = 2;
-
-const CHROMA_LOCATION_UNSPECIFIED: i32 = 0;
-const CHROMA_LOCATION_LEFT: i32 = 1;
-const CHROMA_LOCATION_CENTER: i32 = 2;
-const CHROMA_LOCATION_TOP_LEFT: i32 = 3;
-const CHROMA_LOCATION_TOP: i32 = 4;
-const CHROMA_LOCATION_BOTTOM_LEFT: i32 = 5;
-const CHROMA_LOCATION_BOTTOM: i32 = 6;
-
-const PRIMARIES_BT709: i32 = 1;
-const PRIMARIES_BT470_BG: i32 = 5;
-const PRIMARIES_BT2020: i32 = 9;
-
 fn matrix(description: &FrameDescription) -> anyhow::Result<u32> {
     if description.family == ColorFamily::Rgb {
         return Ok(0);
@@ -173,7 +246,8 @@ fn matrix(description: &FrameDescription) -> anyhow::Result<u32> {
         bail!("the matrix 0 (identity) is only supported for RGB frames");
     }
 
-    if description.matrix == UNSPECIFIED && description.height > STANDARD_DEFINITION_HEIGHT {
+    let is_high_definition = description.encoded_height > STANDARD_DEFINITION_HEIGHT;
+    if description.matrix == UNSPECIFIED && is_high_definition {
         return Ok(MATRIX_BT709);
     }
 
@@ -181,7 +255,7 @@ fn matrix(description: &FrameDescription) -> anyhow::Result<u32> {
         return Ok(MATRIX_BT470_BG);
     }
 
-    let value = check_supported("matrix", description.matrix, &SUPPORTED_MATRICES)?;
+    let value = ColourField::Matrix.check(description.matrix)?;
 
     Ok(value.unsigned_abs())
 }
@@ -203,7 +277,7 @@ fn transfer(value: i32, default: i32) -> anyhow::Result<u32> {
         TRANSFER_BT2020_10_BIT | TRANSFER_BT2020_12_BIT => TRANSFER_BT709,
         other => other,
     };
-    let value = check_supported("transfer", value, &SUPPORTED_TRANSFERS)?;
+    let value = ColourField::Transfer.check(value)?;
 
     Ok(value.unsigned_abs())
 }
@@ -211,7 +285,7 @@ fn transfer(value: i32, default: i32) -> anyhow::Result<u32> {
 fn primaries(value: i32, default: i32) -> anyhow::Result<i32> {
     let value = if value == UNSPECIFIED { default } else { value };
 
-    check_supported("primaries", value, &SUPPORTED_PRIMARIES)
+    ColourField::Primaries.check(value)
 }
 
 fn range(value: i32, family: ColorFamily) -> anyhow::Result<Range> {
@@ -278,30 +352,30 @@ pub fn colour_space(description: &FrameDescription) -> anyhow::Result<ColorSpace
 /// Bit depth may differ.
 pub fn check_compatible(reference: &FrameDescription, distorted: &FrameDescription) -> anyhow::Result<()> {
     if reference.width != distorted.width || reference.height != distorted.height {
-        bail!(
-            "the reference size is {}x{} but the distorted size is {}x{}",
-            reference.width,
-            reference.height,
-            distorted.width,
-            distorted.height,
-        );
+        let reference_size = format!("{}x{}", reference.width, reference.height);
+        let distorted_size = format!("{}x{}", distorted.width, distorted.height);
+        let message =
+            format!("the reference size is {reference_size} but the distorted size is {distorted_size}");
+        bail!("{message}");
     }
 
     let reference_shifts = (reference.sub_sampling_w, reference.sub_sampling_h);
     let distorted_shifts = (distorted.sub_sampling_w, distorted.sub_sampling_h);
     if reference_shifts != distorted_shifts {
-        bail!(
+        let message = format!(
             "the reference chroma subsampling is {reference_shifts:?} but the distorted \
-             chroma subsampling is {distorted_shifts:?}",
+             chroma subsampling is {distorted_shifts:?}"
         );
+        bail!("{message}");
     }
 
     if reference.family != distorted.family {
-        bail!(
-            "the reference colour family is {:?} but the distorted colour family is {:?}",
-            reference.family,
-            distorted.family,
+        let (reference_family, distorted_family) = (reference.family, distorted.family);
+        let message = format!(
+            "the reference colour family is {reference_family:?} but the distorted colour family is \
+             {distorted_family:?}"
         );
+        bail!("{message}");
     }
 
     Ok(())

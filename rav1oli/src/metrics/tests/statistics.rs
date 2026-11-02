@@ -31,7 +31,17 @@ fn summarise_uses_ffvship_percentile_indices() {
 }
 
 #[test]
-fn summarise_with_a_nan_does_not_panic() {
-    let result = summarise(&[1.0, f64::NAN, 3.0]);
-    assert!(result.is_ok());
+fn summarise_with_a_nan_is_an_error() {
+    let error = summarise(&[1.0, f64::NAN, 3.0]).unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("value 1"), "{message}");
+    assert!(message.contains("NaN"), "{message}");
+}
+
+#[test]
+fn summarise_with_an_infinity_is_an_error() {
+    let result = summarise(&[1.0, f64::INFINITY]);
+
+    assert!(result.is_err());
 }

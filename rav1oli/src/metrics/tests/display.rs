@@ -204,3 +204,15 @@ fn an_unrelated_name_gets_no_suggestion() {
     assert!(!message.contains("did you mean"));
     assert!(message.contains("trix_fhd"));
 }
+
+#[test]
+fn a_config_with_no_models_is_an_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = write_config(directory.path(), "{}");
+
+    let error = select_display(Some("mine"), Some(&path), 1280, 720).unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("contains no display models"), "{message}");
+    assert!(message.contains("displays.json"), "{message}");
+}

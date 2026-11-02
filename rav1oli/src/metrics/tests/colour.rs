@@ -9,6 +9,7 @@ fn yuv420(bits: i32) -> FrameDescription {
     FrameDescription {
         width: 64,
         height: 64,
+        encoded_height: 64,
         family: ColorFamily::Yuv,
         bits,
         float: false,
@@ -27,6 +28,7 @@ fn untagged_sd_yuv_uses_bt470bg() {
     let description = FrameDescription {
         width: 720,
         height: 576,
+        encoded_height: 576,
         matrix: 2,
         transfer: 2,
         primaries: 2,
@@ -49,6 +51,7 @@ fn untagged_hd_yuv_uses_bt709() {
     let description = FrameDescription {
         width: 1920,
         height: 1080,
+        encoded_height: 1080,
         matrix: 2,
         transfer: 2,
         primaries: 2,
@@ -60,6 +63,21 @@ fn untagged_hd_yuv_uses_bt709() {
     assert_eq!(space.matrix, 1);
     assert_eq!(space.transfer, 1);
     assert_eq!(space.primaries, 1);
+}
+
+#[test]
+fn untagged_matrix_uses_the_encoded_height() {
+    let description = FrameDescription {
+        width: 1280,
+        height: 650,
+        encoded_height: 651,
+        matrix: 2,
+        ..yuv420(8)
+    };
+
+    let space = colour_space(&description).unwrap();
+
+    assert_eq!(space.matrix, 1);
 }
 
 #[test]
@@ -448,4 +466,32 @@ fn yuv_with_rgb_matrix_is_an_error() {
 
     let message = error.to_string();
     assert!(message.contains("matrix 0"), "{message}");
+}
+
+#[test]
+fn identical_descriptions_have_no_difference() {
+    let description = yuv420(8);
+
+    assert_eq!(description.difference(&description), None);
+}
+
+#[test]
+fn a_colour_change_is_a_difference() {
+    let retagged = FrameDescription {
+        transfer: 16,
+        ..yuv420(8)
+    };
+
+    let difference = yuv420(8).difference(&retagged).unwrap();
+
+    assert!(difference.contains("transfer is 16"), "{difference}");
+}
+
+#[test]
+fn a_layout_change_is_a_difference() {
+    let deeper = yuv420(10);
+
+    let difference = yuv420(8).difference(&deeper).unwrap();
+
+    assert!(difference.contains("bit depth"), "{difference}");
 }

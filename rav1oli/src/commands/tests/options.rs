@@ -4,7 +4,7 @@ use clap::Parser;
 use clap::error::ErrorKind;
 
 use crate::commands::Command;
-use crate::commands::options::AnalysisOptions;
+use crate::commands::options::{AnalysisOptions, DEFAULT_INTENSITY_TARGET};
 use crate::decode::CacheLocation;
 use crate::metrics::{BUTTERAUGLI_QUANTISATION, CVVDP_QUANTISATION};
 
@@ -181,6 +181,16 @@ fn a_floor_at_or_above_the_cap_is_rejected() {
 
     assert_eq!(error.kind(), ErrorKind::ValueValidation);
     assert!(message.contains("--floor"), "{message}");
+    assert!(message.contains("cap of 1"), "{message}");
+}
+
+#[test]
+fn a_butteraugli_floor_error_names_its_cap() {
+    let error = validation_error(&["--metric", "butteraugli", "--floor", "9"]);
+    let message = error.to_string();
+
+    assert_eq!(error.kind(), ErrorKind::ValueValidation);
+    assert!(message.contains("cap of 8"), "{message}");
 }
 
 #[test]
@@ -199,4 +209,36 @@ fn a_non_finite_floor_is_rejected() {
 
     assert_eq!(error.kind(), ErrorKind::ValueValidation);
     assert!(message.contains("--floor"), "{message}");
+}
+
+#[test]
+fn intensity_target_defaults_to_203() {
+    let options = analyse_options(&["--metric", "butteraugli"]);
+
+    assert_eq!(DEFAULT_INTENSITY_TARGET, 203.0);
+    assert_eq!(options.intensity_target(), 203.0);
+}
+
+#[test]
+fn an_intensity_target_overrides_the_default() {
+    let options = analyse_options(&["--metric", "butteraugli", "--intensity-target", "100"]);
+
+    assert_eq!(options.intensity_target(), 100.0);
+}
+
+#[test]
+fn unusable_intensity_targets_are_rejected() {
+    let unusable = [
+        "--intensity-target=0",
+        "--intensity-target=-100",
+        "--intensity-target=nan",
+    ];
+
+    for argument in unusable {
+        let error = validation_error(&["--metric", "butteraugli", argument]);
+        let message = error.to_string();
+
+        assert_eq!(error.kind(), ErrorKind::ValueValidation, "{argument}");
+        assert!(message.contains("--intensity-target"), "{message}");
+    }
 }

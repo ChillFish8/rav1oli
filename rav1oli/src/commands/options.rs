@@ -7,6 +7,10 @@ use rav1oli_table::Quantisation;
 use crate::decode::CacheLocation;
 use crate::metrics::{BUTTERAUGLI_QUANTISATION, CVVDP_QUANTISATION};
 
+/// The display brightness in nits Butteraugli assumes when `--intensity-target` is not set.
+#[cfg_attr(not(test), expect(dead_code, reason = "only used by tests"))]
+pub const DEFAULT_INTENSITY_TARGET: f32 = 203.0;
+
 /// The metric used to measure distortion in the first pass.
 #[derive(Debug, Copy, Clone, Default, Eq, PartialEq, ValueEnum)]
 pub enum Metric {
@@ -64,6 +68,16 @@ impl AnalysisOptions {
             return Err(error);
         }
 
+        let invalid_intensity = self
+            .intensity_target
+            .filter(|target| !target.is_finite() || *target <= 0.0);
+        if let Some(target) = invalid_intensity {
+            let message =
+                format!("invalid value for '--intensity-target': {target} must be finite and above 0");
+            let error = clap::Error::raw(ErrorKind::ValueValidation, message);
+            return Err(error);
+        }
+
         if self.display_config.is_some() && self.display_model.is_none() {
             let message = "the argument '--display-config' requires '--display-model'";
             let error = clap::Error::raw(ErrorKind::ArgumentConflict, message);
@@ -71,6 +85,13 @@ impl AnalysisOptions {
         }
 
         let quantisation = self.quantisation();
+        if quantisation.floor >= quantisation.cap {
+            let (floor, cap) = (quantisation.floor, quantisation.cap);
+            let message = format!("invalid value for '--floor': {floor} must be below the cap of {cap}");
+            let error = clap::Error::raw(ErrorKind::ValueValidation, message);
+            return Err(error);
+        }
+
         if let Err(invalid) = quantisation.check() {
             let message = format!("invalid value for '--floor': {}", invalid.0);
             let error = clap::Error::raw(ErrorKind::ValueValidation, message);
@@ -78,6 +99,12 @@ impl AnalysisOptions {
         }
 
         Ok(())
+    }
+
+    /// The Butteraugli intensity target, or the default if `--intensity-target` is not set.
+    #[cfg_attr(not(test), expect(dead_code, reason = "only used by tests"))]
+    pub fn intensity_target(&self) -> f32 {
+        self.intensity_target.unwrap_or(DEFAULT_INTENSITY_TARGET)
     }
 
     /// The quantisation for the selected metric, with `--floor` replacing its default floor.

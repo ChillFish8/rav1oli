@@ -104,6 +104,8 @@ pub struct MetricScorer {
     config: MetricConfig,
     engine: Engine,
     map: DistortionMap,
+    reference_description: FrameDescription,
+    distorted_description: FrameDescription,
     reference_buffers: PlaneBuffers,
     distorted_buffers: PlaneBuffers,
 }
@@ -177,6 +179,8 @@ impl MetricScorer {
             config,
             engine,
             map,
+            reference_description,
+            distorted_description,
             reference_buffers,
             distorted_buffers,
         })
@@ -193,6 +197,16 @@ impl MetricScorer {
     /// Scores one frame pair and quantises the distortion map into block scores.
     pub fn score(&mut self, reference: &Frame, distorted: &Frame) -> anyhow::Result<ScoredFrame> {
         let frame_index = self.engine.frames_scored();
+
+        let current_reference = FrameDescription::from_frame(reference);
+        if let Some(change) = self.reference_description.difference(&current_reference) {
+            bail!("reference frame {frame_index} differs from the first frame, its {change}");
+        }
+
+        let current_distorted = FrameDescription::from_frame(distorted);
+        if let Some(change) = self.distorted_description.difference(&current_distorted) {
+            bail!("distorted frame {frame_index} differs from the first frame, its {change}");
+        }
 
         let context = || format!("failed to export reference frame {frame_index}");
         self.reference_buffers.export(reference).with_context(context)?;
@@ -216,6 +230,7 @@ impl MetricScorer {
                 let score = metric
                     .compute_with_map(&reference_planes, &distorted_planes, &mut self.map)
                     .with_context(context)?;
+                check_finite(score, "CVVDP", frame_index)?;
                 scores.push(score);
                 FrameScores::Cvvdp { score }
             },
@@ -229,6 +244,9 @@ impl MetricScorer {
                 let score = metric
                     .compute_with_map(&reference_planes, &distorted_planes, &mut self.map)
                     .with_context(context)?;
+                check_finite(score.norm_q, "norm_q", frame_index)?;
+                check_finite(score.norm3, "norm3", frame_index)?;
+                check_finite(score.norm_inf, "norm_inf", frame_index)?;
                 norm_q.push(score.norm_q);
                 norm3.push(score.norm3);
                 norm_inf.push(score.norm_inf);
@@ -293,6 +311,14 @@ impl MetricScorer {
     }
 }
 
+fn check_finite(score: f64, name: &str, frame_index: usize) -> anyhow::Result<()> {
+    if score.is_finite() {
+        return Ok(());
+    }
+
+    bail!("the {name} score of frame {frame_index} is {score}, which is not a finite number");
+}
+
 fn check_display_size(display: &SelectedDisplay, video: &FrameDescription) -> anyhow::Result<()> {
     let display_size = (i64::from(display.width), i64::from(display.height));
     if display_size == (video.width, video.height) {
@@ -307,5 +333,5 @@ fn check_display_size(display: &SelectedDisplay, video: &FrameDescription) -> an
          but the video is {video_width}x{video_height}"
     );
 
-    bail!(message);
+    bail!("{message}");
 }

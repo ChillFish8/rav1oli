@@ -494,3 +494,105 @@ fn creating_a_map_with_an_unusable_quantisation_is_an_error() {
 
     assert!(!path.exists());
 }
+
+#[test]
+fn a_non_finite_frame_score_is_an_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let metadata = butteraugli_metadata();
+    let scores = frame_scores(&metadata, 0);
+    let mut writer = MapWriter::create(&path, &metadata).unwrap();
+    let frame_scores = FrameScores::Butteraugli {
+        norm_q: 0.1,
+        norm3: f64::NAN,
+        norm_inf: 0.3,
+    };
+
+    let result = writer.write_frame(&scores, frame_scores);
+
+    let error = result.unwrap_err();
+    let message = error.to_string();
+    let is_non_finite = matches!(
+        error,
+        TableError::NonFiniteFrameScore {
+            frame: 0,
+            field: "norm3",
+            ..
+        }
+    );
+    assert!(is_non_finite, "{error:?}");
+    assert!(message.contains("norm3"), "{message}");
+}
+
+#[test]
+fn an_infinite_cvvdp_score_is_an_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let metadata = sample_metadata();
+    let scores = frame_scores(&metadata, 0);
+    let mut writer = MapWriter::create(&path, &metadata).unwrap();
+    let frame_scores = FrameScores::Cvvdp { score: f64::INFINITY };
+
+    let result = writer.write_frame(&scores, frame_scores);
+
+    let error = result.unwrap_err();
+    let is_non_finite = matches!(error, TableError::NonFiniteFrameScore { field: "cvvdp", .. });
+    assert!(is_non_finite, "{error:?}");
+}
+
+#[test]
+fn a_non_finite_summary_is_an_error() {
+    let mut statistics = sample_statistics(0.0);
+    statistics.median = f64::NAN;
+    let summaries = [
+        (true, MapSummary::CvvdpTemporal { score: f64::NAN }, "score"),
+        (false, MapSummary::CvvdpPerFrame(statistics), "median"),
+    ];
+
+    for (is_temporal, summary, field) in summaries {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("map.parquet");
+        let mut metadata = sample_metadata();
+        metadata.metric.temporal = is_temporal;
+        let mut writer = MapWriter::create(&path, &metadata).unwrap();
+
+        for seed in 0..metadata.source.frame_count {
+            let scores = frame_scores(&metadata, seed as u8);
+            writer.write_frame(&scores, cvvdp_scores(seed)).unwrap();
+        }
+
+        let result = writer.finish(&summary);
+
+        let error = result.unwrap_err();
+        let message = error.to_string();
+        let is_non_finite = matches!(error, TableError::NonFiniteSummary { .. });
+        assert!(is_non_finite, "{error:?}");
+        assert!(message.contains(field), "{message}");
+    }
+}
+
+#[test]
+fn a_non_finite_butteraugli_summary_names_the_norm() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let metadata = butteraugli_metadata();
+    let mut writer = MapWriter::create(&path, &metadata).unwrap();
+
+    for seed in 0..metadata.source.frame_count {
+        let scores = frame_scores(&metadata, seed as u8);
+        writer.write_frame(&scores, butteraugli_scores(seed)).unwrap();
+    }
+
+    let mut norm_inf = sample_statistics(2.0);
+    norm_inf.maximum = f64::INFINITY;
+    let summary = MapSummary::Butteraugli {
+        norm_q: sample_statistics(0.0),
+        norm3: sample_statistics(1.0),
+        norm_inf,
+    };
+    let result = writer.finish(&summary);
+
+    let error = result.unwrap_err();
+    let message = error.to_string();
+    assert!(message.contains("norm_inf maximum"), "{message}");
+}

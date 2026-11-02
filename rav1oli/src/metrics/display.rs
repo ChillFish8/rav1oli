@@ -56,10 +56,11 @@ pub fn select_display(
     if chosen != (width, height) {
         let name = &selected.settings.model;
         let (chosen_width, chosen_height) = chosen;
-        bail!(
+        let message = format!(
             "display model `{name}` is {chosen_width}x{chosen_height} \
              but the video is {width}x{height}"
         );
+        bail!("{message}");
     }
 
     Ok(selected)
@@ -75,6 +76,10 @@ fn custom_display(path: &Path, name: &str) -> anyhow::Result<SelectedDisplay> {
     let Some(object) = parsed.as_object() else {
         bail!("display config {shown} must be a JSON object");
     };
+
+    if object.is_empty() {
+        bail!("display config {shown} contains no display models");
+    }
 
     let mut resolutions = Vec::new();
     for (entry_name, entry) in object {

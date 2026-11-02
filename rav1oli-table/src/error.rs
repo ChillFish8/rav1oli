@@ -37,4 +37,12 @@ pub enum TableError {
     FrameScoresMismatch { expected: Metric },
     #[error("the summary does not match the {expected} metric of the distortion map")]
     SummaryMismatch { expected: Metric },
+    #[error("the {field} score of frame {frame} is {value}, which is not a finite number")]
+    NonFiniteFrameScore {
+        frame: u32,
+        field: &'static str,
+        value: f64,
+    },
+    #[error("the summary {field} is {value}, which is not a finite number")]
+    NonFiniteSummary { field: String, value: f64 },
 }
