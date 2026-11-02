@@ -20,20 +20,13 @@ fn a_short_encode_is_an_error() {
 fn the_fixture_scores_every_frame() {
     use rav1oli_table::{MapReader, MapWriter};
 
-    use crate::analysis::{
-        colour_description,
-        describe_source,
-        encode_first_pass,
-        encoder_settings,
-        map_metadata,
-        metric_config,
-        score_frames,
-    };
+    use crate::analysis::{map_metadata, metric_config, score_frames};
     use crate::commands::options::{AnalysisOptions, EncoderOptions, Metric};
     use crate::decode::Decoder;
     use crate::decode::tests::copy_fixture;
     use crate::metrics::FrameDescription;
     use crate::metrics::tests::gpu_id;
+    use crate::video::{colour_description, describe_source, encode_video, encoder_settings};
 
     let directory = tempfile::tempdir().unwrap();
     let video = copy_fixture(directory.path());
@@ -50,7 +43,15 @@ fn the_fixture_scores_every_frame() {
         svt_args: vec![],
     };
     let settings = encoder_settings(&source, colour, &options);
-    encode_first_pass(&mut decoder, &source, &settings, &first_pass).unwrap();
+    encode_video(
+        &mut decoder,
+        &source,
+        &settings,
+        &first_pass,
+        "first pass",
+        |_| Ok(None),
+    )
+    .unwrap();
 
     let analysis = AnalysisOptions {
         metric: Metric::Butteraugli,

@@ -129,7 +129,7 @@ fn a_failure_after_the_temporary_map_exists_leaves_no_files() {
     assert!(
         error
             .to_string()
-            .contains("could not start the first-pass encode")
+            .contains("could not start the first pass encode")
     );
     assert_eq!(std::fs::read(&map).unwrap(), b"existing map");
     let names = file_names(directory.path());

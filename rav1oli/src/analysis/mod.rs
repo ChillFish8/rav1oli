@@ -1,27 +1,21 @@
 mod first_pass;
-mod output;
 mod scoring;
-mod source;
+mod settings;
 #[cfg(test)]
 mod tests;
 
 use anyhow::Context;
 use rav1oli_table::{MapSummary, MapWriter, hash_source};
 
-#[cfg(test)]
-pub use self::first_pass::EncoderPlanes;
 use self::first_pass::encode_first_pass;
-pub use self::output::sibling_directory;
-use self::output::{persist, temporary_sibling};
 #[cfg(test)]
 pub use self::scoring::check_frame_counts;
 use self::scoring::score_frames;
-#[cfg(test)]
-pub use self::source::SourceVideo;
-use self::source::{colour_description, describe_source, encoder_settings, map_metadata, metric_config};
+use self::settings::{map_metadata, metric_config};
 use crate::commands::analyse::AnalyseArgs;
 use crate::decode::Decoder;
 use crate::metrics::FrameDescription;
+use crate::video::{colour_description, describe_source, encoder_settings, persist, temporary_sibling};
 
 /// Runs the first-pass encode of the source and scores it into a distortion map.
 pub fn analyse(args: &AnalyseArgs) -> anyhow::Result<MapSummary> {

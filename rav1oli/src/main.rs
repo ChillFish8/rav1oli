@@ -4,6 +4,7 @@ mod decode;
 mod interrupt;
 mod metrics;
 mod progress;
+mod video;
 
 use std::io::IsTerminal;
 

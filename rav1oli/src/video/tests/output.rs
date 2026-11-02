@@ -1,8 +1,8 @@
 use std::fs;
 use std::path::Path;
 
-use crate::analysis::output::sibling_directory;
-use crate::analysis::{persist, temporary_sibling};
+use crate::video::output::sibling_directory;
+use crate::video::{persist, temporary_sibling};
 
 #[test]
 fn temporary_sibling_is_in_the_target_directory() {

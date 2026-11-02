@@ -1,26 +1,11 @@
 use rav1oli_bestsource::{Frame, PlanarTarget, PlaneTarget};
-use rav1oli_svt::{EncoderSettings, Planes};
+use rav1oli_svt::{DistortionGrids, EncoderSettings};
 
-use crate::analysis::{
-    EncoderPlanes,
-    SourceVideo,
-    colour_description,
-    describe_source,
-    encode_first_pass,
-    encoder_settings,
-};
 use crate::commands::options::EncoderOptions;
 use crate::decode::Decoder;
 use crate::decode::tests::{copy_fixture, copy_ten_bit_fixture};
 use crate::metrics::FrameDescription;
-
-fn fixture_source(bit_depth: u8) -> SourceVideo {
-    let dir = tempfile::tempdir().unwrap();
-    let video = copy_fixture(dir.path());
-    let decoder = Decoder::open_uncached(&video).unwrap();
-    let source = describe_source(decoder.properties()).unwrap();
-    SourceVideo { bit_depth, ..source }
-}
+use crate::video::{SourceVideo, colour_description, describe_source, encode_video, encoder_settings};
 
 fn encoder_options() -> EncoderOptions {
     EncoderOptions {
@@ -76,7 +61,10 @@ fn the_fixture_encodes_with_the_same_frame_count() {
     let source = describe_source(decoder.properties()).unwrap();
     let (_, settings) = first_pass_settings(&mut decoder, &source);
 
-    let written = encode_first_pass(&mut decoder, &source, &settings, &output).unwrap();
+    let written = encode_video(&mut decoder, &source, &settings, &output, "first pass", |_| {
+        Ok(None)
+    })
+    .unwrap();
 
     assert_eq!(written, u64::from(source.frame_count));
     let encoded = Decoder::open_uncached(&output).unwrap();
@@ -84,37 +72,6 @@ fn the_fixture_encodes_with_the_same_frame_count() {
     assert_eq!(properties.num_frames, i64::from(source.frame_count));
     assert_eq!(properties.ss_mod_width, 64);
     assert_eq!(properties.ss_mod_height, 64);
-}
-
-#[test]
-fn ten_bit_planes_carry_ten_bit_samples() {
-    let planes = EncoderPlanes::new(&fixture_source(10));
-
-    let (lengths, strides) = planes.lengths_and_strides();
-
-    assert!(planes.is_ten_bit());
-    assert_eq!(lengths, [64 * 64, 32 * 32, 32 * 32]);
-    assert_eq!(strides, [64, 32, 32]);
-}
-
-#[test]
-fn eight_bit_planes_match_the_frame_size() {
-    let dir = tempfile::tempdir().unwrap();
-    let video = copy_fixture(dir.path());
-    let mut decoder = Decoder::open_uncached(&video).unwrap();
-    let source = describe_source(decoder.properties()).unwrap();
-    let frame = decoder.frames().next().unwrap().unwrap();
-    let mut planes = EncoderPlanes::new(&source);
-
-    let exported = planes.export(&frame).unwrap();
-
-    let Planes::Eight { y, u, v, strides } = exported else {
-        panic!("expected eight bit planes");
-    };
-    assert_eq!(y.len(), 64 * 64);
-    assert_eq!(u.len(), 32 * 32);
-    assert_eq!(v.len(), 32 * 32);
-    assert_eq!(strides, [64, 32, 32]);
 }
 
 #[test]
@@ -127,7 +84,10 @@ fn the_ten_bit_fixture_encodes_close_to_the_source() {
     let (first_frame, settings) = first_pass_settings(&mut decoder, &source);
     let source_luma = ten_bit_luma(&first_frame);
 
-    let written = encode_first_pass(&mut decoder, &source, &settings, &output).unwrap();
+    let written = encode_video(&mut decoder, &source, &settings, &output, "first pass", |_| {
+        Ok(None)
+    })
+    .unwrap();
 
     assert_eq!(source.bit_depth, 10);
     assert_eq!(written, u64::from(source.frame_count));
@@ -165,8 +125,59 @@ fn a_failed_first_pass_removes_its_output() {
         ..source
     };
 
-    let error = encode_first_pass(&mut decoder, &longer, &settings, &output).unwrap_err();
+    let error = encode_video(&mut decoder, &longer, &settings, &output, "first pass", |_| {
+        Ok(None)
+    })
+    .unwrap_err();
 
     assert!(error.to_string().contains("frames but the source has"));
+    assert!(!output.exists());
+}
+
+fn zero_grids() -> DistortionGrids {
+    DistortionGrids::new(64, 64, vec![0; 1], vec![0; 64]).unwrap()
+}
+
+#[test]
+fn grids_are_requested_for_every_frame_in_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let video = copy_fixture(dir.path());
+    let output = dir.path().join("final.ivf");
+    let mut decoder = Decoder::open_uncached(&video).unwrap();
+    let source = describe_source(decoder.properties()).unwrap();
+    let (_, settings) = first_pass_settings(&mut decoder, &source);
+    let mut requested = Vec::new();
+    let grids_for = |index: usize| {
+        requested.push(index);
+        Ok(Some(zero_grids()))
+    };
+
+    let written = encode_video(&mut decoder, &source, &settings, &output, "final pass", grids_for).unwrap();
+
+    let expected: Vec<usize> = (0..source.frame_count as usize).collect();
+    assert_eq!(requested, expected);
+    assert_eq!(written, u64::from(source.frame_count));
+    let encoded = Decoder::open_uncached(&output).unwrap();
+    assert_eq!(encoded.properties().num_frames, i64::from(source.frame_count));
+}
+
+#[test]
+fn a_failing_grids_callback_stops_and_removes_the_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let video = copy_fixture(dir.path());
+    let output = dir.path().join("final.ivf");
+    let mut decoder = Decoder::open_uncached(&video).unwrap();
+    let source = describe_source(decoder.properties()).unwrap();
+    let (_, settings) = first_pass_settings(&mut decoder, &source);
+    let grids_for = |index: usize| {
+        if index == 2 {
+            anyhow::bail!("no grids for frame two");
+        }
+        Ok(Some(zero_grids()))
+    };
+
+    let error = encode_video(&mut decoder, &source, &settings, &output, "final pass", grids_for).unwrap_err();
+
+    assert!(format!("{error:#}").contains("no grids for frame two"));
     assert!(!output.exists());
 }
