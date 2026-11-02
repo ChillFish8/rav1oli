@@ -21,6 +21,8 @@ include = [
 ]
 
 [dependencies]
+libc = { workspace = true }
+thiserror = { workspace = true }
 
 [build-dependencies]
 bindgen = { workspace = true }

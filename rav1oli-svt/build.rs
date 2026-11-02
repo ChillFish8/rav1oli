@@ -60,6 +60,9 @@ fn main() {
     let c_flags_path = out_dir.join("svt-c-flags.txt");
     library::write_c_flags(&install_dir, &c_flags_path);
 
+    let release_flags_path = out_dir.join("svt-release-flags.txt");
+    library::write_release_flags(&install_dir, &release_flags_path);
+
     link_svt(&install_dir);
 
     let bindings_path = out_dir.join("bindings.rs");

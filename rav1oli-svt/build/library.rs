@@ -28,7 +28,9 @@ pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
     let binary_dir = out_dir.join("build").join("Bin");
 
     let mut config = cmake::Config::new(SVT_SOURCE);
+    // Always Release, as a Debug build turns on SVT's allocation tracker which our frees would bypass.
     config
+        .profile("Release")
         .init_c_cfg(c_config)
         .init_cxx_cfg(cxx_config)
         .define("CMAKE_C_COMPILER", svt_build.clang)
@@ -76,6 +78,15 @@ fn msvc_runtime_library() -> &'static str {
 
 /// Writes the `CMAKE_C_FLAGS` SVT was configured with to `output`.
 pub fn write_c_flags(install_dir: &Path, output: &Path) {
+    write_cache_entry(install_dir, "CMAKE_C_FLAGS", output);
+}
+
+/// Writes the `CMAKE_C_FLAGS_RELEASE` SVT was configured with to `output`.
+pub fn write_release_flags(install_dir: &Path, output: &Path) {
+    write_cache_entry(install_dir, "CMAKE_C_FLAGS_RELEASE", output);
+}
+
+fn write_cache_entry(install_dir: &Path, entry: &str, output: &Path) {
     let cache_path = install_dir.join("build").join("CMakeCache.txt");
     let cache = fs::read_to_string(&cache_path);
     let cache = match cache {
@@ -83,14 +94,13 @@ pub fn write_c_flags(install_dir: &Path, output: &Path) {
         Err(error) => panic!("could not read {}: {error}", cache_path.display()),
     };
 
-    let c_flags = cache
-        .lines()
-        .find_map(|line| line.strip_prefix("CMAKE_C_FLAGS:STRING="));
-    let Some(c_flags) = c_flags else {
-        panic!("{} has no CMAKE_C_FLAGS entry", cache_path.display());
+    let prefix = format!("{entry}:STRING=");
+    let value = cache.lines().find_map(|line| line.strip_prefix(prefix.as_str()));
+    let Some(value) = value else {
+        panic!("{} has no {entry} entry", cache_path.display());
     };
 
-    let written = fs::write(output, c_flags);
+    let written = fs::write(output, value);
     if let Err(error) = written {
         panic!("could not write {}: {error}", output.display());
     }

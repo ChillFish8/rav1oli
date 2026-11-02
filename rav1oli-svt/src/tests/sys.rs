@@ -1,3 +1,4 @@
+const SVT_RELEASE_FLAGS: &str = include_str!(concat!(env!("OUT_DIR"), "/svt-release-flags.txt"));
 #[cfg(svt_default_cpu)]
 const SVT_C_FLAGS: &str = include_str!(concat!(env!("OUT_DIR"), "/svt-c-flags.txt"));
 
@@ -14,4 +15,10 @@ fn the_default_build_targets_no_specific_cpu() {
     assert!(!flags.contains("-march"), "{flags}");
     assert!(!flags.contains("-mcpu"), "{flags}");
     assert!(!flags.contains("-mavx"), "{flags}");
+}
+
+#[test]
+fn the_build_is_a_release_build() {
+    let flags = SVT_RELEASE_FLAGS;
+    assert!(flags.contains("NDEBUG"), "{flags}");
 }

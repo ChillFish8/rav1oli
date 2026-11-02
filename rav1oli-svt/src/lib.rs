@@ -5,11 +5,16 @@
 #[cfg(test)]
 #[path = "../build/cpu.rs"]
 mod cpu_flag;
+mod error;
+mod params;
 mod sys;
 #[cfg(test)]
 mod tests;
 
 use std::ffi::CStr;
+
+pub use self::error::ParamError;
+pub use self::params::{check_params, param_names};
 
 /// The version string of the linked SVT-AV1 library.
 pub fn version() -> String {
