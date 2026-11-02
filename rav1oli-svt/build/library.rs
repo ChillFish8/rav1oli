@@ -13,12 +13,12 @@ pub struct SvtBuild<'a> {
     pub cpu_flag: Option<&'a str>,
     pub is_x86_64: bool,
     pub is_msvc: bool,
+    pub is_lto: bool,
 }
 
 /// Configures, builds and installs the static SVT library, returning the install dir.
 pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
-    let mut c_config = cc::Build::new();
-    c_config.compiler(svt_build.clang);
+    let c_config = c_config(svt_build.clang);
 
     let mut cxx_config = cc::Build::new();
     cxx_config.cpp(true).compiler(svt_build.clang);
@@ -56,6 +56,10 @@ pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
         config.cflag(cpu_flag).cxxflag(cpu_flag);
     }
 
+    if svt_build.is_lto {
+        config.cflag("-flto").cxxflag("-flto");
+    }
+
     // The Visual Studio generator ignores `CMAKE_C_COMPILER`, so clang-cl needs Ninja.
     if svt_build.is_msvc {
         let runtime_library = msvc_runtime_library();
@@ -65,6 +69,13 @@ pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
     }
 
     config.build()
+}
+
+/// The cc config whose flags seed SVT's C compile.
+pub fn c_config(clang: &Path) -> cc::Build {
+    let mut c_config = cc::Build::new();
+    c_config.compiler(clang);
+    c_config
 }
 
 /// The release CRT Rust links, as CMake would otherwise pick the debug CRT for a Debug build.
@@ -100,8 +111,13 @@ fn write_cache_entry(install_dir: &Path, entry: &str, output: &Path) {
         panic!("{} has no {entry} entry", cache_path.display());
     };
 
-    let written = fs::write(output, value);
+    write_text(output, value);
+}
+
+/// Writes `contents` to `path`, failing with an error naming the path.
+pub fn write_text(path: &Path, contents: &str) {
+    let written = fs::write(path, contents);
     if let Err(error) = written {
-        panic!("could not write {}: {error}", output.display());
+        panic!("could not write {}: {error}", path.display());
     }
 }

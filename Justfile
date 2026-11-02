@@ -7,16 +7,21 @@ format:
 # Builds the workspace, fetching submodules and static deps when missing.
 #
 # Takes `--static`, `--release`, and `--vulkan` or `--cuda` for the static Vship backend, Vulkan by default.
+# `--release` also builds SVT-AV1 with LTO, which needs `llvm-link` and `llvm-ar` from clang's LLVM version.
 build *FLAGS:
     #!/usr/bin/env bash
     set -euo pipefail
     is_static=false
     profile_flag=""
+    features=""
     vship_backend=""
     for flag in {{FLAGS}}; do
         case "$flag" in
             --static) is_static=true ;;
-            --release) profile_flag="--release" ;;
+            --release)
+                profile_flag="--release"
+                features="rav1oli-svt/lto"
+                ;;
             --vulkan | --cuda)
                 if [ -n "$vship_backend" ] && [ "$vship_backend" != "${flag#--}" ]; then
                     echo "--vulkan and --cuda cannot be used together" >&2
@@ -38,7 +43,7 @@ build *FLAGS:
     fi
 
     if [ "$is_static" = false ]; then
-        cargo build --workspace $profile_flag
+        cargo build --workspace $profile_flag --features "$features"
         exit 0
     fi
 
@@ -50,7 +55,7 @@ build *FLAGS:
 
     export BESTSOURCE_LIB_DIR="$prefix/lib"
     export PKG_CONFIG_PATH="$prefix/lib/pkgconfig"
-    features="rav1oli-bestsource/static,rav1oli-vship/static,rav1oli-vship/${vship_backend:-vulkan}"
+    features="$features,rav1oli-bestsource/static,rav1oli-vship/static,rav1oli-vship/${vship_backend:-vulkan}"
     cargo build --workspace $profile_flag --features "$features"
 
 clippy *ARGS:

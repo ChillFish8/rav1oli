@@ -16,11 +16,11 @@ use crate::{
 
 const WIDTH: u32 = 136;
 const HEIGHT: u32 = 72;
-const FRAMES: u64 = 4;
+pub(super) const FRAMES: u64 = 4;
 const CHROMA_WIDTH: usize = WIDTH as usize / 2;
 const CHROMA_HEIGHT: usize = HEIGHT as usize / 2;
 
-fn settings(bit_depth: u8, svt_args: &[&str]) -> EncoderSettings {
+pub(super) fn settings(bit_depth: u8, svt_args: &[&str]) -> EncoderSettings {
     let svt_args = svt_args.iter().map(|arg| arg.to_string()).collect();
 
     EncoderSettings {
@@ -56,7 +56,7 @@ fn gradient(width: usize, height: usize, frame: u64, max: u16) -> Vec<u16> {
     plane
 }
 
-fn mixed_grids(frame: u64) -> DistortionGrids {
+pub(super) fn mixed_grids(frame: u64) -> DistortionGrids {
     let drops = (0..6).map(|cell| ((cell + frame) * 17 % 81) as u8).collect();
     let cuts = (0..17 * 9)
         .map(|cell| ((cell + frame) * 37 % 231) as u8)
@@ -70,7 +70,7 @@ fn gradient_eight(width: usize, height: usize, frame: u64, max: u8) -> Vec<u8> {
     wide.iter().map(|&sample| sample as u8).collect()
 }
 
-fn encode_eight_bit(encoder: &mut Encoder, frame: u64, grids: Option<&DistortionGrids>) {
+pub(super) fn encode_eight_bit(encoder: &mut Encoder, frame: u64, grids: Option<&DistortionGrids>) {
     let y_plane = gradient_eight(WIDTH as usize, HEIGHT as usize, frame, 255);
     let u_plane = gradient_eight(CHROMA_WIDTH, CHROMA_HEIGHT, frame, 200);
     let v_plane = gradient_eight(CHROMA_WIDTH, CHROMA_HEIGHT, frame + 5, 180);
@@ -84,7 +84,7 @@ fn encode_eight_bit(encoder: &mut Encoder, frame: u64, grids: Option<&Distortion
     encoder.send_frame(&planes, grids).unwrap();
 }
 
-fn check_output(path: &Path) {
+pub(super) fn check_output(path: &Path) {
     let bytes = fs::read(path).unwrap();
     let file = read_ivf(&bytes);
 

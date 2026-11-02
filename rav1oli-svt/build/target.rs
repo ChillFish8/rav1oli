@@ -44,3 +44,12 @@ pub fn target_cpu_flag() -> Option<String> {
 
     cpu::cpu_flag_for(&rustflags, &target_arch, is_clang_cl)
 }
+
+/// The file name of a static library as the target's linker looks it up.
+pub fn static_library_name(name: &str) -> String {
+    if is_msvc_target() {
+        return format!("{name}.lib");
+    }
+
+    format!("lib{name}.a")
+}

@@ -21,6 +21,10 @@ include = [
     "vendor/svt-av1/third_party/safestringlib/**",
 ]
 
+[features]
+# Merges SVT into one module with `llvm-link` before compiling it to native code.
+lto = []
+
 [dependencies]
 libc = { workspace = true }
 thiserror = { workspace = true }

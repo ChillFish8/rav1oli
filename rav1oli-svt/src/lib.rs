@@ -12,6 +12,9 @@ mod encoder;
 mod error;
 mod grids;
 mod ivf;
+#[cfg(test)]
+#[path = "../build/llvm.rs"]
+mod llvm;
 mod logging;
 mod params;
 mod sys;
