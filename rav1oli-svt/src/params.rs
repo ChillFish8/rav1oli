@@ -192,6 +192,11 @@ const ENCODER_OWNED: &[&str] = &[
 
 pub(crate) const SVT_SUCCESS: sys::EbErrorType = sys::EB_ErrorNone;
 
+/// Whether rav1oli sets this flag itself, so it cannot be passed through.
+pub fn is_encoder_owned(name: &str) -> bool {
+    ENCODER_OWNED.contains(&name)
+}
+
 /// Every long name the fork's parser accepts.
 pub fn param_names() -> &'static [&'static str] {
     PARAM_NAMES

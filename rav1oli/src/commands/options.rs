@@ -4,6 +4,7 @@ use clap::error::ErrorKind;
 use clap::{Args, ValueEnum};
 use rav1oli_table::Quantisation;
 
+use super::passthrough::{long_flags, validate_svt_args};
 use crate::decode::CacheLocation;
 use crate::metrics::{BUTTERAUGLI_QUANTISATION, CVVDP_QUANTISATION};
 
@@ -129,9 +130,28 @@ pub struct EncoderOptions {
     /// The SVT-AV1 constant rate factor, lower is higher quality.
     #[arg(long, default_value_t = 30)]
     pub crf: u8,
-    /// Extra parameters passed directly to SVT-AV1.
-    #[arg(long, allow_hyphen_values = true)]
-    pub svt_params: Option<String>,
+    /// Unrecognised `--flags`, filled in from the command line after parsing.
+    #[arg(skip)]
+    pub svt_args: Vec<String>,
+}
+
+impl EncoderOptions {
+    /// Checks the SVT-AV1 flags, with `subcommand` supplying the flags to suggest from.
+    pub fn validate(&self, subcommand: &clap::Command) -> Result<(), clap::Error> {
+        let rav1oli_flags = long_flags(subcommand);
+
+        validate_svt_args(&self.svt_args, &rav1oli_flags)
+    }
+
+    /// The SVT-AV1 flags joined into one string, or `None` if there are none.
+    #[cfg_attr(not(test), expect(dead_code, reason = "only used by tests"))]
+    pub fn svt_params_string(&self) -> Option<String> {
+        if self.svt_args.is_empty() {
+            return None;
+        }
+
+        Some(self.svt_args.join(" "))
+    }
 }
 
 #[derive(Debug, Clone, Args)]

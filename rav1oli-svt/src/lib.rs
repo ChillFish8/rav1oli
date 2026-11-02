@@ -23,7 +23,7 @@ use std::ffi::CStr;
 pub use self::encoder::{ChromaPosition, ColourDescription, EncodeSummary, Encoder, EncoderSettings, Planes};
 pub use self::error::{EncodeError, GridError, GridKind, ParamError};
 pub use self::grids::{DistortionGrids, MAX_CUT, MAX_DROP};
-pub use self::params::{check_params, param_names};
+pub use self::params::{check_params, is_encoder_owned, param_names};
 
 /// The version string of the linked SVT-AV1 library.
 pub fn version() -> String {

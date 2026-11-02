@@ -180,3 +180,9 @@ fn an_roi_map_breaks_a_requirement() {
 
     assert!(reason.contains("ROI"), "{reason}");
 }
+
+#[test]
+fn encoder_owned_names_are_reported() {
+    assert!(crate::is_encoder_owned("width"));
+    assert!(!crate::is_encoder_owned("ac-bias"));
+}

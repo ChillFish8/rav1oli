@@ -10,6 +10,7 @@ mod metrics;
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 
 use self::commands::Command;
+use self::commands::passthrough::split_args;
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -27,13 +28,24 @@ struct Args {
 
 fn main() -> anyhow::Result<()> {
     let mut cli = Args::command();
-    let matches = cli.get_matches_mut();
-    let args = match Args::from_arg_matches(&matches) {
+    let split = split_args(&cli, std::env::args_os().collect());
+    let matches = match cli.try_get_matches_from_mut(split.clap_args) {
+        Ok(matches) => matches,
+        Err(error) => error.exit(),
+    };
+    let mut args = match Args::from_arg_matches(&matches) {
         Ok(args) => args,
         Err(error) => error.format(&mut cli).exit(),
     };
 
-    if let Err(error) = args.command.validate() {
+    args.command.set_svt_args(split.svt_args);
+
+    let subcommand_name = matches.subcommand_name();
+    let Some(subcommand) = subcommand_name.and_then(|name| cli.find_subcommand(name)) else {
+        unreachable!("clap requires a subcommand and only knows the ones it parsed");
+    };
+
+    if let Err(error) = args.command.validate(subcommand) {
         exit_with_error(&mut cli, &matches, error);
     }
 

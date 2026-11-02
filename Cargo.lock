@@ -851,6 +851,7 @@ dependencies = [
  "clap",
  "rav1oli-bestsource",
  "rav1oli-quantise",
+ "rav1oli-svt",
  "rav1oli-table",
  "rav1oli-vship",
  "serde_json",
