@@ -13,20 +13,12 @@ const SUPPORTED_VERSION: i64 = 1;
 
 /// A piecewise linear curve from a distortion to a whole number value.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the encode command will use the tables")
-)]
 pub struct Curve {
     points: Vec<(f64, u8)>,
 }
 
 /// The drop and cut values for every map score.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the encode command will use the tables")
-)]
 pub struct Lookups {
     pub drops: [u8; 256],
     pub cuts: [u8; 256],
@@ -34,10 +26,6 @@ pub struct Lookups {
 
 /// A metric's drop and cut curves.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the encode command will use the tables")
-)]
 pub struct Tables {
     pub metric: Metric,
     pub drop: Curve,
@@ -75,10 +63,6 @@ impl StoredTable {
     }
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the encode command will use the tables")
-)]
 impl Curve {
     /// Checks the points and builds a curve, with values of at most `largest`.
     pub(super) fn new(name: &str, stored: &[(f64, f64)], largest: u8) -> Result<Curve> {
@@ -143,10 +127,6 @@ impl Curve {
     }
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the encode command will use the tables")
-)]
 impl Tables {
     /// Parses a table file, filling a missing curve with the default for its metric.
     pub fn parse(json: &str) -> Result<Tables> {

@@ -3,8 +3,6 @@ mod defaults;
 #[cfg(test)]
 mod tests;
 
-#[cfg_attr(
-    not(test),
-    expect(unused_imports, reason = "the encode command will use the tables")
-)]
-pub use self::curve::{Curve, Lookups, Tables};
+#[cfg(test)]
+pub use self::curve::Curve;
+pub use self::curve::{Lookups, Tables};

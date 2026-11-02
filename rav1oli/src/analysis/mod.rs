@@ -11,7 +11,8 @@ use self::first_pass::encode_first_pass;
 #[cfg(test)]
 pub use self::scoring::check_frame_counts;
 use self::scoring::score_frames;
-use self::settings::{map_metadata, metric_config};
+use self::settings::metric_config;
+pub use self::settings::{encoder_info, map_metadata, source_info};
 use crate::commands::analyse::AnalyseArgs;
 use crate::decode::Decoder;
 use crate::metrics::FrameDescription;

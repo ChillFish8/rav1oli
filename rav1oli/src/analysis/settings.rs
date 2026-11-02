@@ -30,6 +30,26 @@ pub fn metric_config(options: &AnalysisOptions, source: &SourceVideo) -> anyhow:
     }
 }
 
+/// The source details stored in the distortion map.
+pub fn source_info(source: &SourceVideo, hash: String) -> SourceInfo {
+    SourceInfo {
+        hash,
+        width: source.width,
+        height: source.height,
+        frame_count: source.frame_count,
+        frame_rate: source.frame_rate,
+    }
+}
+
+/// The encoder settings stored in the distortion map.
+pub fn encoder_info(options: &EncoderOptions) -> MapEncoderSettings {
+    MapEncoderSettings {
+        preset: options.preset,
+        crf: options.crf,
+        svt_params: options.svt_params_string(),
+    }
+}
+
 /// The metadata stored in the distortion map.
 pub fn map_metadata(
     source: &SourceVideo,
@@ -38,18 +58,8 @@ pub fn map_metadata(
     config: &MetricConfig,
 ) -> MapMetadata {
     MapMetadata {
-        source: SourceInfo {
-            hash,
-            width: source.width,
-            height: source.height,
-            frame_count: source.frame_count,
-            frame_rate: source.frame_rate,
-        },
-        encoder: MapEncoderSettings {
-            preset: options.preset,
-            crf: options.crf,
-            svt_params: options.svt_params_string(),
-        },
+        source: source_info(source, hash),
+        encoder: encoder_info(options),
         metric: metric_settings(config),
         quantisation: config.quantisation(),
     }
