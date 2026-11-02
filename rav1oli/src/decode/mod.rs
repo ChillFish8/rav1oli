@@ -5,5 +5,4 @@ mod lock;
 pub(crate) mod tests;
 
 pub use self::cache::CacheLocation;
-#[expect(unused_imports, reason = "the decoder is only used by tests")]
-pub use self::decoder::{Decoder, Frames};
+pub use self::decoder::Decoder;

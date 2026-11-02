@@ -7,10 +7,6 @@ use anyhow::Context;
 use tempfile::{Builder, TempPath};
 
 /// A temporary file in the directory holding `target`, named `.<target file name>.<random><suffix>`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the outputs are only written by the analyse command")
-)]
 pub fn temporary_sibling(target: &Path, suffix: &str) -> anyhow::Result<TempPath> {
     let file_name = target
         .file_name()
@@ -38,10 +34,6 @@ pub fn temporary_sibling(target: &Path, suffix: &str) -> anyhow::Result<TempPath
 }
 
 /// Renames `temporary` to `target`, replacing any existing file.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the outputs are only written by the analyse command")
-)]
 pub fn persist(temporary: TempPath, target: &Path) -> anyhow::Result<()> {
     let temporary_path = temporary.to_path_buf();
 
@@ -58,10 +50,6 @@ pub fn persist(temporary: TempPath, target: &Path) -> anyhow::Result<()> {
 }
 
 /// The directory holding `target`, which is the current directory for a bare file name with no parent.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the outputs are only written by the analyse command")
-)]
 pub(super) fn sibling_directory(target: &Path) -> &Path {
     match target.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,

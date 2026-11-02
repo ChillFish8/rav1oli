@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
 use clap::Args;
+use clap::error::ErrorKind;
 
 use super::options::{AnalysisOptions, CacheOptions, EncoderOptions};
+use crate::analysis::analyse;
 
 #[derive(Debug, Args)]
 pub struct AnalyseArgs {
@@ -12,6 +14,9 @@ pub struct AnalyseArgs {
     /// Where to write the distortion map.
     #[arg(short, long)]
     pub map: PathBuf,
+    /// Keep the first-pass encode at this path instead of deleting it.
+    #[arg(long)]
+    pub keep_encode: Option<PathBuf>,
 
     #[command(flatten)]
     pub analysis: AnalysisOptions,
@@ -23,8 +28,35 @@ pub struct AnalyseArgs {
     pub cache: CacheOptions,
 }
 
+impl AnalyseArgs {
+    /// Checks the output paths do not overwrite the input or each other.
+    pub fn validate_paths(&self) -> Result<(), clap::Error> {
+        if self.map == self.input {
+            let message = "the arguments '--map' and '--input' must be different files";
+            return Err(clap::Error::raw(ErrorKind::ArgumentConflict, message));
+        }
+
+        let Some(keep_encode) = &self.keep_encode else {
+            return Ok(());
+        };
+
+        if *keep_encode == self.input {
+            let message = "the argument '--keep-encode' must not be the same file as '--input'";
+            return Err(clap::Error::raw(ErrorKind::ArgumentConflict, message));
+        }
+
+        if *keep_encode == self.map {
+            let message = "the argument '--keep-encode' must not be the same file as '--map'";
+            return Err(clap::Error::raw(ErrorKind::ArgumentConflict, message));
+        }
+
+        Ok(())
+    }
+}
+
 pub fn execute(args: AnalyseArgs) -> anyhow::Result<()> {
     tracing::debug!(?args, "running analyse");
 
-    unimplemented!()
+    analyse(&args)?;
+    Ok(())
 }

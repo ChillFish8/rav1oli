@@ -9,7 +9,6 @@ use crate::decode::CacheLocation;
 use crate::metrics::{BUTTERAUGLI_QUANTISATION, CVVDP_QUANTISATION};
 
 /// The display brightness in nits Butteraugli assumes when `--intensity-target` is not set.
-#[cfg_attr(not(test), expect(dead_code, reason = "only used by tests"))]
 pub const DEFAULT_INTENSITY_TARGET: f32 = 203.0;
 
 /// The metric used to measure distortion in the first pass.
@@ -103,7 +102,6 @@ impl AnalysisOptions {
     }
 
     /// The Butteraugli intensity target, or the default if `--intensity-target` is not set.
-    #[cfg_attr(not(test), expect(dead_code, reason = "only used by tests"))]
     pub fn intensity_target(&self) -> f32 {
         self.intensity_target.unwrap_or(DEFAULT_INTENSITY_TARGET)
     }
@@ -144,7 +142,6 @@ impl EncoderOptions {
     }
 
     /// The SVT-AV1 flags joined into one string, or `None` if there are none.
-    #[cfg_attr(not(test), expect(dead_code, reason = "only used by tests"))]
     pub fn svt_params_string(&self) -> Option<String> {
         if self.svt_args.is_empty() {
             return None;
@@ -162,7 +159,6 @@ pub struct CacheOptions {
 }
 
 impl CacheOptions {
-    #[cfg_attr(not(test), expect(dead_code, reason = "only used by tests"))]
     pub fn location(&self) -> CacheLocation {
         match &self.cache_dir {
             Some(path) => CacheLocation::Directory(path.clone()),

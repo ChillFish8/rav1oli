@@ -19,13 +19,6 @@ pub fn check_frame_counts(source: u32, encoded: i64) -> anyhow::Result<()> {
 /// Scores every frame pair and writes the block scores to `writer`.
 ///
 /// The source is the reference and the encode is the distorted video.
-#[cfg_attr(
-    not(all(test, feature = "gpu-tests")),
-    expect(
-        dead_code,
-        reason = "scoring is only driven by the GPU tests until the analyse command runs it"
-    )
-)]
 pub fn score_frames(
     source: &mut Decoder,
     encoded: &mut Decoder,

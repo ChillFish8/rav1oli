@@ -1,17 +1,10 @@
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the analysis settings are only used by tests")
-)]
 mod analysis;
 mod commands;
-#[cfg_attr(not(test), expect(dead_code, reason = "the decoder is only used by tests"))]
 mod decode;
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "only the quantisation defaults are used outside tests")
-)]
 mod metrics;
 mod progress;
+
+use std::io::IsTerminal;
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 use tracing_subscriber::EnvFilter;
@@ -90,8 +83,10 @@ unsafe fn setup_logging(args_log_level: Option<&str>) {
 
     let filter = EnvFilter::from_default_env();
     let writer = progress::tracing_writer();
+    let is_terminal = std::io::stderr().is_terminal();
     tracing_subscriber::fmt()
         .with_env_filter(filter)
+        .with_ansi(is_terminal)
         .with_writer(writer)
         .init();
 }

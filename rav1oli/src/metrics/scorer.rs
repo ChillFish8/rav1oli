@@ -186,10 +186,18 @@ impl MetricScorer {
         })
     }
 
+    #[cfg_attr(
+        not(all(test, feature = "gpu-tests")),
+        expect(dead_code, reason = "only the GPU tests read the settings back")
+    )]
     pub fn settings(&self) -> MetricSettings {
         metric_settings(&self.config)
     }
 
+    #[cfg_attr(
+        not(all(test, feature = "gpu-tests")),
+        expect(dead_code, reason = "only the GPU tests read the quantisation back")
+    )]
     pub fn quantisation(&self) -> Quantisation {
         self.config.quantisation()
     }

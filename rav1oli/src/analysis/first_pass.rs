@@ -6,7 +6,7 @@ use indicatif::ProgressBar;
 use rav1oli_bestsource::{Frame, PlanarTarget, PlaneTarget};
 use rav1oli_svt::{Encoder, EncoderSettings, Planes};
 
-use super::SourceVideo;
+use super::source::SourceVideo;
 use crate::decode::Decoder;
 use crate::progress::{finish, frame_bar};
 

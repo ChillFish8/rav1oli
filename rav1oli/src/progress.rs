@@ -59,19 +59,11 @@ fn frame_bar_on(multi: &MultiProgress, message: &'static str, total: u64) -> Pro
 }
 
 /// Creates a frame progress bar on the shared [MultiProgress].
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "bars are only created by later commands")
-)]
 pub fn frame_bar(message: &'static str, total: u64) -> ProgressBar {
     frame_bar_on(multi(), message, total)
 }
 
 /// Clears the bar and logs how many frames it covered and how fast.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "bars are only created by later commands")
-)]
 pub fn finish(bar: &ProgressBar, verb: &str) {
     let frames = bar.position();
     let elapsed = bar.elapsed();

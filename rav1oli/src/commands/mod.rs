@@ -1,10 +1,10 @@
-mod analyse;
+pub mod analyse;
 mod encode;
 pub mod options;
 pub mod passthrough;
 mod run;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use clap::Subcommand;
 
@@ -31,6 +31,7 @@ impl Command {
     pub fn validate(&self, subcommand: &clap::Command) -> Result<(), clap::Error> {
         match self {
             Command::Analyse(args) => {
+                args.validate_paths()?;
                 args.analysis.validate()?;
                 args.encoder.validate(subcommand)
             },
