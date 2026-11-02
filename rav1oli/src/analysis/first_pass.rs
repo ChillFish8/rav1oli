@@ -1,5 +1,6 @@
+use std::io::ErrorKind;
 use std::path::Path;
-use std::slice;
+use std::{fs, slice};
 
 use anyhow::{Context, bail};
 use indicatif::ProgressBar;
@@ -8,6 +9,7 @@ use rav1oli_svt::{Encoder, EncoderSettings, Planes};
 
 use super::source::SourceVideo;
 use crate::decode::Decoder;
+use crate::interrupt;
 use crate::progress::{finish, frame_bar};
 
 const TEN_BIT: u8 = 10;
@@ -30,8 +32,8 @@ impl EncoderPlanes {
     pub fn new(source: &SourceVideo) -> Self {
         let luma_width = source.width as usize;
         let luma_height = source.height as usize;
-        let chroma_width = luma_width / 2;
-        let chroma_height = luma_height / 2;
+        let chroma_width = luma_width.div_ceil(2);
+        let chroma_height = luma_height.div_ceil(2);
 
         let lengths = [
             luma_width * luma_height,
@@ -53,19 +55,33 @@ impl EncoderPlanes {
     pub fn export(&mut self, frame: &Frame) -> anyhow::Result<Planes<'_>> {
         let strides = self.strides;
         match &mut self.buffers {
-            Buffers::Eight([y, u, v]) => {
-                let planes = [y.as_mut_slice(), u.as_mut_slice(), v.as_mut_slice()];
+            Buffers::Eight([y_plane, u_plane, v_plane]) => {
+                let planes = [
+                    y_plane.as_mut_slice(),
+                    u_plane.as_mut_slice(),
+                    v_plane.as_mut_slice(),
+                ];
                 export_planes(frame, planes, strides, 1)?;
             },
-            Buffers::Ten([y, u, v]) => {
-                let planes = [as_bytes(y), as_bytes(u), as_bytes(v)];
+            Buffers::Ten([y_plane, u_plane, v_plane]) => {
+                let planes = [as_bytes(y_plane), as_bytes(u_plane), as_bytes(v_plane)];
                 export_planes(frame, planes, strides, 2)?;
             },
         }
 
         let planes = match &self.buffers {
-            Buffers::Eight([y, u, v]) => Planes::Eight { y, u, v, strides },
-            Buffers::Ten([y, u, v]) => Planes::Ten { y, u, v, strides },
+            Buffers::Eight([y_plane, u_plane, v_plane]) => Planes::Eight {
+                y: y_plane,
+                u: u_plane,
+                v: v_plane,
+                strides,
+            },
+            Buffers::Ten([y_plane, u_plane, v_plane]) => Planes::Ten {
+                y: y_plane,
+                u: u_plane,
+                v: v_plane,
+                strides,
+            },
         };
         Ok(planes)
     }
@@ -73,8 +89,8 @@ impl EncoderPlanes {
     #[cfg(test)]
     pub(super) fn lengths_and_strides(&self) -> ([usize; 3], [usize; 3]) {
         let lengths = match &self.buffers {
-            Buffers::Eight([y, u, v]) => [y.len(), u.len(), v.len()],
-            Buffers::Ten([y, u, v]) => [y.len(), u.len(), v.len()],
+            Buffers::Eight([y_plane, u_plane, v_plane]) => [y_plane.len(), u_plane.len(), v_plane.len()],
+            Buffers::Ten([y_plane, u_plane, v_plane]) => [y_plane.len(), u_plane.len(), v_plane.len()],
         };
         (lengths, self.strides)
     }
@@ -115,6 +131,8 @@ fn export_planes(
 }
 
 /// Encodes every frame of `decoder` to `output`, returning the frames written.
+///
+/// A failed encode removes the partial `output`.
 pub fn encode_first_pass(
     decoder: &mut Decoder,
     source: &SourceVideo,
@@ -122,7 +140,18 @@ pub fn encode_first_pass(
     output: &Path,
 ) -> anyhow::Result<u64> {
     let encoder = Encoder::new(settings, output).context("could not start the first-pass encode")?;
-    let bar = frame_bar("encoding", u64::from(source.frame_count));
+
+    let result = run_encoder(decoder, source, encoder);
+    if result.is_err() {
+        remove_partial(output);
+    }
+
+    result
+}
+
+fn run_encoder(decoder: &mut Decoder, source: &SourceVideo, encoder: Encoder) -> anyhow::Result<u64> {
+    let expected = u64::from(source.frame_count);
+    let bar = frame_bar("encoding", expected);
 
     let result = encode_frames(decoder, source, encoder, &bar);
     let verb = if result.is_ok() {
@@ -133,12 +162,22 @@ pub fn encode_first_pass(
     finish(&bar, verb);
 
     let written = result?;
-    let expected = u64::from(source.frame_count);
     if written != expected {
         bail!("the first pass has {written} frames but the source has {expected}");
     }
 
     Ok(written)
+}
+
+fn remove_partial(output: &Path) {
+    let removed = fs::remove_file(output);
+    match removed {
+        Ok(()) => {},
+        Err(error) if error.kind() == ErrorKind::NotFound => {},
+        Err(error) => {
+            tracing::warn!(output = %output.display(), "could not remove the partial first pass: {error}");
+        },
+    }
 }
 
 fn encode_frames(
@@ -150,6 +189,8 @@ fn encode_frames(
     let mut planes = EncoderPlanes::new(source);
 
     for (index, frame) in decoder.frames().enumerate() {
+        interrupt::check()?;
+
         let frame = frame?;
         let exported = planes.export(&frame)?;
 

@@ -4,6 +4,7 @@ use rav1oli_bestsource::Frame;
 use rav1oli_table::{MapSummary, MapWriter};
 
 use crate::decode::Decoder;
+use crate::interrupt;
 use crate::metrics::{MetricConfig, MetricScorer};
 use crate::progress::{finish, frame_bar};
 
@@ -47,6 +48,8 @@ fn score_pairs(
     writer: &mut MapWriter,
     bar: &ProgressBar,
 ) -> anyhow::Result<MapSummary> {
+    interrupt::check()?;
+
     let mut pairs = source.frames().zip(encoded.frames()).enumerate();
     let Some((_, (first_reference, first_distorted))) = pairs.next() else {
         bail!("the source has no frames to score");
@@ -58,6 +61,8 @@ fn score_pairs(
     bar.inc(1);
 
     for (index, (reference, distorted)) in pairs {
+        interrupt::check()?;
+
         let (reference, distorted) = decode_pair(index, reference, distorted)?;
 
         write_pair(&mut scorer, writer, index, &reference, &distorted)?;

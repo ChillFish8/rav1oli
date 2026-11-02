@@ -2,7 +2,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use indicatif::style::TemplateError;
-use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 use tracing_indicatif::IndicatifWriter;
 use tracing_indicatif::writer::Stderr;
 
@@ -27,6 +27,24 @@ pub fn tracing_writer() -> IndicatifWriter<Stderr> {
 
 fn format_fps(per_second: f64) -> String {
     format!("{per_second:.2} fps")
+}
+
+/// Formats `duration` in whole seconds, such as `24s`, `6m24s` or `1h02m03s`.
+fn format_duration(duration: Duration) -> String {
+    let total_seconds = duration.as_secs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+
+    if hours > 0 {
+        return format!("{hours}h{minutes:02}m{seconds:02}s");
+    }
+
+    if minutes > 0 {
+        return format!("{minutes}m{seconds:02}s");
+    }
+
+    format!("{seconds}s")
 }
 
 fn frames_per_second(frames: u64, elapsed_seconds: f64) -> f64 {
@@ -68,7 +86,7 @@ pub fn finish(bar: &ProgressBar, verb: &str) {
     let frames = bar.position();
     let elapsed = bar.elapsed();
     let fps = frames_per_second(frames, elapsed.as_secs_f64());
-    let elapsed = HumanDuration(elapsed);
+    let elapsed = format_duration(elapsed);
 
     bar.finish_and_clear();
     multi().remove(bar);
@@ -125,6 +143,13 @@ mod tests {
     #[test]
     fn fps_key_formats_two_decimals() {
         assert_eq!(format_fps(7.5), "7.50 fps");
+    }
+
+    #[test]
+    fn durations_format_as_hours_minutes_and_seconds() {
+        assert_eq!(format_duration(Duration::from_millis(24_900)), "24s");
+        assert_eq!(format_duration(Duration::from_secs(384)), "6m24s");
+        assert_eq!(format_duration(Duration::from_secs(3723)), "1h02m03s");
     }
 
     #[test]

@@ -11,6 +11,7 @@ use rav1oli_table::{MapSummary, MapWriter, hash_source};
 #[cfg(test)]
 pub use self::first_pass::EncoderPlanes;
 use self::first_pass::encode_first_pass;
+pub use self::output::sibling_directory;
 use self::output::{persist, temporary_sibling};
 #[cfg(test)]
 pub use self::scoring::check_frame_counts;
@@ -28,6 +29,17 @@ pub fn analyse(args: &AnalyseArgs) -> anyhow::Result<MapSummary> {
     tracing::info!(gpu, "checking the GPU");
     rav1oli_vship::check_device(gpu).with_context(|| format!("failed to check GPU {gpu}"))?;
     tracing::info!(gpu, "checked the GPU");
+
+    // Created before any long running work so an unwritable map directory fails early. Both temporary
+    // files are held until the end so they are deleted whether the run succeeds or fails.
+    let temporary_map = temporary_sibling(&args.map, ".tmp")?;
+    let (encode_path, _temporary_encode) = match &args.keep_encode {
+        Some(path) => (path.clone(), None),
+        None => {
+            let temporary = temporary_sibling(&args.map, ".ivf")?;
+            (temporary.to_path_buf(), Some(temporary))
+        },
+    };
 
     tracing::info!(input = %args.input.display(), "opening the source");
     let cache = args.cache.location();
@@ -47,24 +59,12 @@ pub fn analyse(args: &AnalyseArgs) -> anyhow::Result<MapSummary> {
         "opened the source"
     );
 
+    tracing::info!("building the settings");
     let config = metric_config(&args.analysis, &source)?;
     let settings = encoder_settings(&source, colour, &args.encoder);
-
-    tracing::info!("hashing the source");
     let hash = hash_source(&args.input).context("could not hash the source")?;
-    tracing::info!(hash, "hashed the source");
     let metadata = map_metadata(&source, hash, &args.encoder, &config);
-
-    // Created before the encode so an unwritable map directory fails early. Both temporary
-    // files are held until the end so they are deleted whether the run succeeds or fails.
-    let temporary_map = temporary_sibling(&args.map, ".tmp")?;
-    let (encode_path, _temporary_encode) = match &args.keep_encode {
-        Some(path) => (path.clone(), None),
-        None => {
-            let temporary = temporary_sibling(&args.map, ".ivf")?;
-            (temporary.to_path_buf(), Some(temporary))
-        },
-    };
+    tracing::info!(hash = %metadata.source.hash, "built the settings");
 
     tracing::info!(output = %encode_path.display(), "starting the first-pass encode");
     encode_first_pass(&mut source_decoder, &source, &settings, &encode_path)?;
@@ -84,10 +84,11 @@ pub fn analyse(args: &AnalyseArgs) -> anyhow::Result<MapSummary> {
         gpu,
         &mut writer,
     )?;
+    log_summary(&summary);
+
+    tracing::info!(map = %args.map.display(), "writing the distortion map");
     writer.finish(&summary).context("could not finish the map")?;
     persist(temporary_map, &args.map)?;
-
-    log_summary(&summary);
     tracing::info!(map = %args.map.display(), "wrote the distortion map");
 
     Ok(summary)

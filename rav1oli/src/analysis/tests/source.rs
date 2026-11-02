@@ -159,7 +159,7 @@ fn describe_source_rejects_zero_frames() {
     let mut empty = properties(format(8), 64, 64);
     empty.num_frames = 0;
 
-    assert!(describe_source(&empty).is_err());
+    assert_eq!(error_message(&empty), "the source has no frames");
 }
 
 #[test]
@@ -167,7 +167,18 @@ fn describe_source_rejects_a_zero_frame_rate_denominator() {
     let mut stalled = properties(format(8), 64, 64);
     stalled.fps = (24000, 0);
 
-    assert!(describe_source(&stalled).is_err());
+    assert_eq!(
+        error_message(&stalled),
+        "the source frame rate denominator 0 is invalid"
+    );
+}
+
+#[test]
+fn describe_source_rejects_a_zero_ss_mod_size() {
+    let mut empty = properties(format(8), 64, 64);
+    empty.ss_mod_height = 0;
+
+    assert_eq!(error_message(&empty), "the source size 64x0 is invalid");
 }
 
 #[test]
@@ -203,6 +214,7 @@ fn chroma_locations_map_to_positions() {
         (3, ChromaPosition::TopLeft),
         (4, ChromaPosition::Top),
     ];
+
     for (chroma_location, position) in expected {
         let description = FrameDescription {
             chroma_location,

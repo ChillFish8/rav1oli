@@ -1,6 +1,7 @@
 mod analysis;
 mod commands;
 mod decode;
+mod interrupt;
 mod metrics;
 mod progress;
 

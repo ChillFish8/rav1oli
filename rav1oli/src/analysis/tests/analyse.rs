@@ -115,6 +115,32 @@ fn a_failed_analyse_leaves_no_files() {
 }
 
 #[test]
+fn a_failure_after_the_temporary_map_exists_leaves_no_files() {
+    let directory = tempfile::tempdir().unwrap();
+    let video = copy_fixture(directory.path());
+    let map = directory.path().join("map.parquet");
+    std::fs::write(&map, b"existing map").unwrap();
+    let kept = directory.path().join("missing").join("kept.ivf");
+    let kept_text = path_text(&kept);
+    let args = butteraugli_args(&video, &map, gpu_id(), &["--keep-encode", &kept_text]);
+
+    let error = analyse(&args).unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("could not start the first-pass encode")
+    );
+    assert_eq!(std::fs::read(&map).unwrap(), b"existing map");
+    let names = file_names(directory.path());
+    assert!(
+        names
+            .iter()
+            .all(|name| !name.ends_with(".tmp") && !name.ends_with(".ivf"))
+    );
+}
+
+#[test]
 fn a_temporary_encode_is_removed() {
     let directory = tempfile::tempdir().unwrap();
     let video = copy_fixture(directory.path());

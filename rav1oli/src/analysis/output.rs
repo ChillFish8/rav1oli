@@ -35,22 +35,17 @@ pub fn temporary_sibling(target: &Path, suffix: &str) -> anyhow::Result<TempPath
 
 /// Renames `temporary` to `target`, replacing any existing file.
 pub fn persist(temporary: TempPath, target: &Path) -> anyhow::Result<()> {
-    let temporary_path = temporary.to_path_buf();
+    let temporary_path = temporary.display();
+    let message = format!("could not move {temporary_path} to {}", target.display());
 
     temporary
         .persist(target)
         .map_err(|persist_error| persist_error.error)
-        .with_context(|| {
-            format!(
-                "could not move {} to {}",
-                temporary_path.display(),
-                target.display()
-            )
-        })
+        .context(message)
 }
 
-/// The directory holding `target`, which is the current directory for a bare file name with no parent.
-pub(super) fn sibling_directory(target: &Path) -> &Path {
+/// The directory holding `target`, which is the current directory for a bare file name.
+pub fn sibling_directory(target: &Path) -> &Path {
     match target.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),

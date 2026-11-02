@@ -28,7 +28,7 @@ pub struct SourceVideo {
 
 /// Checks the source is 8-bit or 10-bit YUV 4:2:0 and reads its size, frame count and frame rate.
 ///
-/// The size is the one `export_planar` writes, so odd sized sources lose their last row or column.
+/// The size is rounded down to whole chroma samples, so odd sized sources lose their last row or column.
 pub fn describe_source(properties: &VideoProperties) -> anyhow::Result<SourceVideo> {
     check_format(&properties.format)?;
 
@@ -36,6 +36,10 @@ pub fn describe_source(properties: &VideoProperties) -> anyhow::Result<SourceVid
         .with_context(|| format!("the source width {} is invalid", properties.ss_mod_width))?;
     let height = u32::try_from(properties.ss_mod_height)
         .with_context(|| format!("the source height {} is invalid", properties.ss_mod_height))?;
+    if width == 0 || height == 0 {
+        bail!("the source size {width}x{height} is invalid");
+    }
+
     let bit_depth = u8::try_from(properties.format.bits)
         .with_context(|| format!("the source bit depth {} is invalid", properties.format.bits))?;
 
