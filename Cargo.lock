@@ -811,6 +811,8 @@ dependencies = [
  "rav1oli-bestsource",
  "rav1oli-table",
  "rav1oli-vship",
+ "serde_json",
+ "strsim",
  "tempfile",
  "tracing",
  "tracing-subscriber",
