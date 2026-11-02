@@ -32,13 +32,28 @@ fn the_default_build_targets_no_specific_cpu() {
     assert!(!flags.contains("-mtune"), "{flags}");
 }
 
-#[cfg(svt_default_cpu)]
+#[cfg(all(svt_default_cpu, not(target_env = "msvc")))]
 #[test]
 fn the_build_compiles_with_the_codegen_flags() {
     let flags = SVT_C_FLAGS;
     let words: Vec<&str> = flags.split_whitespace().collect();
 
     for codegen_flag in crate::cpu_flag::SVT_CODEGEN_FLAGS {
+        assert!(words.contains(&codegen_flag), "{flags}");
+    }
+}
+
+#[cfg(all(
+    svt_default_cpu,
+    not(target_env = "msvc"),
+    any(target_os = "linux", target_os = "android", target_os = "freebsd")
+))]
+#[test]
+fn the_elf_build_compiles_with_the_elf_codegen_flags() {
+    let flags = SVT_C_FLAGS;
+    let words: Vec<&str> = flags.split_whitespace().collect();
+
+    for codegen_flag in crate::cpu_flag::SVT_ELF_CODEGEN_FLAGS {
         assert!(words.contains(&codegen_flag), "{flags}");
     }
 }
@@ -115,16 +130,11 @@ fn use_mode(content_hash: u64) -> ProfileMode {
 fn a_mismatched_profile_fails() {
     let mode = use_mode(0);
     let flags = profile_flags(&mode, false);
+    let flags: Vec<&str> = flags.iter().map(String::as_str).collect();
 
-    assert!(
-        flags.contains(&"-fprofile-use=svt.profdata".to_string()),
-        "{flags:?}"
-    );
-    assert!(flags.contains(&"-Werror=backend-plugin".to_string()), "{flags:?}");
-    assert!(
-        flags.contains(&"-Werror=profile-instr-out-of-date".to_string()),
-        "{flags:?}"
-    );
+    assert!(flags.contains(&"-fprofile-use=svt.profdata"), "{flags:?}");
+    assert!(flags.contains(&"-Werror=backend-plugin"), "{flags:?}");
+    assert!(flags.contains(&"-Werror=profile-instr-out-of-date"), "{flags:?}");
 }
 
 #[test]

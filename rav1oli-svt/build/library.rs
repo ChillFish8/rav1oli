@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::target;
+use crate::{simd, target};
 
 /// The fork's source tree, checked out as a submodule.
 pub const SVT_SOURCE: &str = "vendor/svt-av1";
@@ -12,7 +12,7 @@ pub struct SvtBuild<'a> {
     pub nasm: Option<&'a Path>,
     /// The codegen and CPU flags from [svt_c_flags](crate::cpu::svt_c_flags).
     pub c_flags: &'a [String],
-    pub is_x86_64: bool,
+    pub target_arch: &'a str,
     pub is_msvc: bool,
     pub is_lto: bool,
     pub profile_flags: &'a [String],
@@ -28,6 +28,12 @@ endforeach()
 
 /// The project include for builds that keep the cmake crate's flags as they are.
 const NO_CHANGE_SCRIPT: &str = "# The flags are left as the cmake crate set them.\n";
+
+/// A target that builds nothing, so a build of it only configures SVT.
+const CONFIGURE_TARGET: &str = "rav1oli_configure";
+
+/// Adds [CONFIGURE_TARGET](crate::library::CONFIGURE_TARGET) to every project include.
+const CONFIGURE_TARGET_SCRIPT: &str = "add_custom_target(rav1oli_configure)\n";
 
 /// Configures, builds and installs the static SVT library, returning the install dir.
 pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
@@ -61,7 +67,7 @@ pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
         config.define("CMAKE_ASM_NASM_COMPILER", nasm);
     }
 
-    if svt_build.is_x86_64 {
+    if svt_build.target_arch == "x86_64" {
         config.define("ENABLE_AVX512", "ON");
     }
 
@@ -85,7 +91,8 @@ pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
         NO_CHANGE_SCRIPT
     };
     let script_path = out_dir.join("project-include.cmake");
-    write_text(&script_path, project_script);
+    let script = format!("{project_script}{CONFIGURE_TARGET_SCRIPT}");
+    write_text(&script_path, &script);
     config.define("CMAKE_PROJECT_INCLUDE", &script_path);
 
     // The Visual Studio generator ignores `CMAKE_C_COMPILER`, so clang-cl needs Ninja.
@@ -96,7 +103,26 @@ pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
             .define("CMAKE_MSVC_RUNTIME_LIBRARY", runtime_library);
     }
 
+    // Configuring alone first lets a failed SIMD flag check stop the build before SVT compiles.
+    config.build_target(CONFIGURE_TARGET);
+    let install_dir = config.build();
+    check_simd(&install_dir, svt_build.target_arch);
+
+    config.build_target("install").always_configure(false);
     config.build()
+}
+
+/// Fails the build unless SVT's CMake kept the SIMD flags its kernels need.
+fn check_simd(install_dir: &Path, target_arch: &str) {
+    let cache_path = cache_path(install_dir);
+    let cache = read_cache(&cache_path);
+
+    let checked = simd::check_simd_cache(&cache, target_arch);
+    if let Err(reason) = checked {
+        let log_dir = cache_path.with_file_name("CMakeFiles");
+        let shown_log_dir = log_dir.display();
+        panic!("{reason}. CMake logs its flag checks under {shown_log_dir}");
+    }
 }
 
 /// The cc config whose flags seed SVT's C compile.
@@ -126,12 +152,8 @@ pub fn write_release_flags(install_dir: &Path, output: &Path) {
 }
 
 fn write_cache_entry(install_dir: &Path, entry: &str, output: &Path) {
-    let cache_path = install_dir.join("build").join("CMakeCache.txt");
-    let cache = fs::read_to_string(&cache_path);
-    let cache = match cache {
-        Ok(cache) => cache,
-        Err(error) => panic!("could not read {}: {error}", cache_path.display()),
-    };
+    let cache_path = cache_path(install_dir);
+    let cache = read_cache(&cache_path);
 
     let prefix = format!("{entry}:STRING=");
     let value = cache.lines().find_map(|line| line.strip_prefix(prefix.as_str()));
@@ -140,6 +162,18 @@ fn write_cache_entry(install_dir: &Path, entry: &str, output: &Path) {
     };
 
     write_text(output, value);
+}
+
+fn cache_path(install_dir: &Path) -> PathBuf {
+    install_dir.join("build").join("CMakeCache.txt")
+}
+
+fn read_cache(cache_path: &Path) -> String {
+    let cache = fs::read_to_string(cache_path);
+    match cache {
+        Ok(cache) => cache,
+        Err(error) => panic!("could not read {}: {error}", cache_path.display()),
+    }
 }
 
 /// Writes `contents` to `path`, failing with an error naming the path.

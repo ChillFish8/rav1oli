@@ -4,4 +4,5 @@ mod grids;
 mod ivf;
 mod llvm;
 mod params;
+mod simd;
 mod sys;

@@ -129,6 +129,15 @@ impl Encoder {
         params::apply_params(&mut config.config, &settings.svt_args)?;
         params::check_requirements(&config.config)?;
 
+        // SVT starts before the file is created, so a rejected config leaves no output behind.
+        let mut session = Session {
+            config,
+            is_started: false,
+            is_eos_sent: false,
+            frames_sent: 0,
+        };
+        session.start()?;
+
         let file = File::create(output).map_err(|source| io_error(output, source))?;
         let buffered = BufWriter::new(file);
         let writer = IvfWriter::new(
@@ -139,14 +148,6 @@ impl Encoder {
             settings.fps_denominator,
         );
         let writer = writer.map_err(|source| io_error(output, source))?;
-
-        let mut session = Session {
-            config,
-            is_started: false,
-            is_eos_sent: false,
-            frames_sent: 0,
-        };
-        session.start()?;
 
         Ok(Self {
             session,

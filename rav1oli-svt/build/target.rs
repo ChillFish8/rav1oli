@@ -16,6 +16,10 @@ pub fn target_arch() -> String {
     env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default()
 }
 
+pub fn target_os() -> String {
+    env::var("CARGO_CFG_TARGET_OS").unwrap_or_default()
+}
+
 pub fn is_unix_target() -> bool {
     let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap_or_default();
 

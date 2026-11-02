@@ -161,13 +161,26 @@ fn comma_lists_starting_with_a_dash_stay_with_their_flag() {
 }
 
 #[test]
-fn a_flag_after_an_svt_flag_is_taken_as_its_value() {
-    let arguments = ["test", "run", "-i", "a", "-o", "b", "--tune", "--ac-bias"];
-    let error = parse_and_validate(&arguments).expect_err("--ac-bias is not a tune");
+fn a_flag_after_an_svt_flag_is_not_taken_as_its_value() {
+    let arguments = ["test", "run", "-i", "a", "-o", "b", "--enable-qm", "--tune", "0"];
+    let split = split(&arguments);
 
+    assert_eq!(split.svt_args, strings(&["--enable-qm", "--tune", "0"]));
+
+    let error = parse_and_validate(&arguments).expect_err("--enable-qm has no value");
     let message = error.to_string();
-    assert!(message.contains("tune"), "{message}");
-    assert!(message.contains("--ac-bias"), "{message}");
+    assert!(message.contains("`enable-qm` needs a value"), "{message}");
+}
+
+#[test]
+fn help_after_an_svt_flag_shows_help() {
+    let arguments = ["test", "run", "--tune", "--help"];
+    let split = split(&arguments);
+
+    assert_eq!(split.svt_args, strings(&["--tune"]));
+
+    let error = parse_and_validate(&arguments).expect_err("--help exits through an error");
+    assert_eq!(error.kind(), ErrorKind::DisplayHelp);
 }
 
 #[test]
@@ -231,12 +244,12 @@ fn an_unrelated_flag_gets_no_suggestion() {
     let error = parse_and_validate(&["test", "run", "-i", "a", "-o", "b", "--zzzzzzzzzzzz", "1"])
         .expect_err("--zzzzzzzzzzzz should be rejected");
 
+    let message = error.to_string();
     assert!(
-        error
-            .to_string()
-            .contains("neither a rav1oli flag nor an SVT-AV1 parameter")
+        message.contains("neither a rav1oli flag nor an SVT-AV1 parameter"),
+        "{message}"
     );
-    assert!(!error.to_string().contains("did you mean"), "{error}");
+    assert!(!message.contains("did you mean"), "{message}");
 }
 
 #[test]

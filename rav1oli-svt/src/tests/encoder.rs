@@ -258,6 +258,17 @@ fn an_svt_flag_is_applied() {
 }
 
 #[test]
+fn a_config_svt_rejects_leaves_no_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("rejected.ivf");
+
+    let error = Encoder::new(&settings(8, &["--buf-sz", "5"]), &path).unwrap_err();
+    let is_expected = matches!(error, EncodeError::Svt { .. });
+    assert!(is_expected, "{error:?}");
+    assert!(!path.exists());
+}
+
+#[test]
 fn an_encoder_dropped_without_finish_is_released() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("dropped.ivf");

@@ -1,4 +1,5 @@
 use std::ffi::OsString;
+use std::iter::Peekable;
 
 use clap::error::ErrorKind;
 use rav1oli_svt::{ParamError, check_params, is_encoder_owned, param_names};
@@ -31,7 +32,7 @@ pub fn split_args(command: &clap::Command, args: Vec<OsString>) -> SplitArgs {
     let mut split = SplitArgs::default();
     let mut known = flags_of(command, &[]);
     let mut subcommand_found = false;
-    let mut tokens = args.into_iter();
+    let mut tokens = args.into_iter().peekable();
 
     if let Some(program) = tokens.next() {
         split.clap_args.push(program);
@@ -92,8 +93,15 @@ pub fn split_args(command: &clap::Command, args: Vec<OsString>) -> SplitArgs {
     split
 }
 
-/// Moves the token after an SVT-AV1 flag across as its value, whatever it looks like.
-fn take_svt_value(tokens: &mut std::vec::IntoIter<OsString>, split: &mut SplitArgs) {
+/// Moves the token after an SVT-AV1 flag across as its value, unless it is another `--flag`.
+///
+/// No SVT-AV1 value starts with `--`, while negative numbers and lists start with a single `-`.
+fn take_svt_value(tokens: &mut Peekable<std::vec::IntoIter<OsString>>, split: &mut SplitArgs) {
+    let next = tokens.peek().and_then(|next| next.to_str());
+    if next.is_some_and(|text| text.starts_with("--")) {
+        return;
+    }
+
     let Some(next) = tokens.next() else {
         return;
     };

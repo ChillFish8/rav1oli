@@ -18,6 +18,8 @@ format:
 # Takes `--static`, `--release`, and `--vulkan` or `--cuda` for the static Vship backend, Vulkan by default.
 # `--release` also builds SVT-AV1 with LTO and PGO, which need `llvm-link`, `llvm-ar` and `llvm-profdata` from
 # clang's LLVM version. It uses the profile in `RAV1OLI_SVT_PGO_PROFILE`, or trains one with `pgo-svt` first.
+# The profile is passed in SVT-AV1's C flags, which CMake splits on spaces, so a `--release` build fails
+# when the checkout or the profile path holds a space.
 build *FLAGS:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -56,8 +58,25 @@ build *FLAGS:
         just submodules
     fi
 
+    # The static tree is set up first, so PGO training decodes through it too.
+    if [ "$is_static" = true ]; then
+        prefix="$PWD/vcpkg_installed/{{vcpkg_triplet}}"
+        marker="$prefix/lib/pkgconfig/bestsource.pc"
+        if [ ! -f "$marker" ] || [ -n "$(find vcpkg.json vcpkg/ports -newer "$marker")" ]; then
+            just static-deps
+        fi
+
+        export BESTSOURCE_LIB_DIR="$prefix/lib"
+        export PKG_CONFIG_PATH="$prefix/lib/pkgconfig"
+    fi
+
     if [ -n "$profile_flag" ] && [ -z "${RAV1OLI_SVT_PGO_PROFILE:-}" ]; then
-        just pgo-svt
+        pgo_features=""
+        if [ "$is_static" = true ]; then
+            pgo_features="rav1oli-bestsource/static"
+        fi
+
+        RAV1OLI_PGO_FEATURES="$pgo_features" just pgo-svt
         export RAV1OLI_SVT_PGO_PROFILE="$PWD/target/pgo/svt.profdata"
     fi
 
@@ -66,14 +85,6 @@ build *FLAGS:
         exit 0
     fi
 
-    prefix="$PWD/vcpkg_installed/{{vcpkg_triplet}}"
-    marker="$prefix/lib/pkgconfig/bestsource.pc"
-    if [ ! -f "$marker" ] || [ -n "$(find vcpkg.json vcpkg/ports -newer "$marker")" ]; then
-        just static-deps
-    fi
-
-    export BESTSOURCE_LIB_DIR="$prefix/lib"
-    export PKG_CONFIG_PATH="$prefix/lib/pkgconfig"
     features="$features,rav1oli-bestsource/static,rav1oli-vship/static,rav1oli-vship/${vship_backend:-vulkan}"
     cargo build --workspace $profile_flag --features "$features"
 
@@ -92,12 +103,26 @@ bench *ARGS:
 # The clip comes from `RAV1OLI_PGO_CLIP`. The instrumented build uses the release profile, LTO and the
 # caller's RUSTFLAGS, so the profile matches the release build that uses it. It trains at presets 4 and 8.
 # x86_64 hosts with AVX2 run both again capped at AVX2, so those kernels are profiled too.
+# `RAV1OLI_PGO_FEATURES` adds cargo features to the training build, such as `rav1oli-bestsource/static`.
 pgo-svt:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ if pgo_clip == "" { error("set RAV1OLI_PGO_CLIP to the training clip") } else { "" } }}
 
-    clang="${CC:-clang}"
+    # The clang lookup matches the SVT-AV1 build script, which reads the cc crate's variables in order.
+    host="$(rustc -vV | sed -n 's/^host: //p')"
+    clang="clang"
+    if [[ "$host" == *-msvc ]]; then
+        clang="clang-cl"
+    fi
+
+    for variable in "CC_$host" "CC_${host//-/_}" TARGET_CC CC; do
+        if value="$(printenv "$variable")"; then
+            clang="$value"
+            break
+        fi
+    done
+
     if ! clang_path="$(command -v "$clang")"; then
         echo "$clang not found, but training needs it to find a matching llvm-profdata" >&2
         exit 1
@@ -134,7 +159,7 @@ pgo-svt:
     unset RAV1OLI_SVT_PGO_PROFILE
     export RAV1OLI_SVT_PGO_GENERATE="$raw_dir"
     export RAV1OLI_PGO_OUTPUT="$pgo_dir/train.ivf"
-    features="rav1oli-svt/lto,rav1oli-svt/pgo-train"
+    features="rav1oli-svt/lto,rav1oli-svt/pgo-train${RAV1OLI_PGO_FEATURES:+,$RAV1OLI_PGO_FEATURES}"
     cargo build --release -p rav1oli-svt --example pgo-train --features "$features"
     train=(cargo run --release -p rav1oli-svt --example pgo-train --features "$features")
 

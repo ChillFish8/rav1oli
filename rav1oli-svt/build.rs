@@ -10,6 +10,8 @@ mod llvm;
 mod lto;
 #[path = "build/pgo.rs"]
 mod pgo;
+#[path = "build/simd.rs"]
+mod simd;
 #[path = "build/target.rs"]
 mod target;
 #[path = "build/toolchain.rs"]
@@ -59,8 +61,9 @@ fn main() {
     }
 
     let target_arch = target::target_arch();
+    let target_os = target::target_os();
     let is_x86_64 = target_arch == "x86_64";
-    let c_flags = cpu::svt_c_flags(&cpu_flags, is_msvc);
+    let c_flags = cpu::svt_c_flags(&cpu_flags, is_msvc, &target_os);
     let nasm = is_x86_64.then(|| toolchain::require_tool("nasm"));
 
     let is_lto = env::var_os("CARGO_FEATURE_LTO").is_some();
@@ -78,7 +81,7 @@ fn main() {
         clang: &clang,
         nasm: nasm.as_deref(),
         c_flags: &c_flags,
-        is_x86_64,
+        target_arch: &target_arch,
         is_msvc,
         is_lto,
         profile_flags: &profile_flags,

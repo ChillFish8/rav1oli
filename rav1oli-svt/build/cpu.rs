@@ -1,44 +1,60 @@
 /// The codegen flags every clang compile of SVT takes.
-pub const SVT_CODEGEN_FLAGS: [&str; 6] = [
+pub const SVT_CODEGEN_FLAGS: [&str; 4] = [
     "-fno-math-errno",
     "-fomit-frame-pointer",
-    "-fno-semantic-interposition",
     "-fno-stack-protector",
-    "-fno-stack-clash-protection",
     "-U_FORTIFY_SOURCE",
 ];
 
+/// The codegen flags clang only claims when targeting Linux, Android or FreeBSD.
+///
+/// Elsewhere clang reports them as unused, which fails every flag check in SVT's CMake.
+pub const SVT_ELF_CODEGEN_FLAGS: [&str; 2] = ["-fno-semantic-interposition", "-fno-stack-clash-protection"];
+
+/// The target OSes whose clang claims [SVT_ELF_CODEGEN_FLAGS](crate::cpu::SVT_ELF_CODEGEN_FLAGS).
+const ELF_CODEGEN_OSES: [&str; 3] = ["linux", "android", "freebsd"];
+
 /// The C flags for the last `-C target-cpu` in cargo's encoded rustflags.
 ///
-/// x86_64 takes `-march` and `-mtune`, while aarch64 takes `-mcpu`, which also tunes. clang-cl gets each
+/// x86_64 takes `-march` and aarch64 takes `-mcpu`, each of which also tunes for that CPU. clang-cl gets the
 /// flag through `/clang:`.
 pub fn cpu_flags_for(rustflags: &str, target_arch: &str, is_clang_cl: bool) -> Vec<String> {
     let Some(cpu) = last_target_cpu(rustflags) else {
         return Vec::new();
     };
 
-    let flags = match target_arch {
-        "x86_64" => vec![format!("-march={cpu}"), format!("-mtune={cpu}")],
-        "aarch64" => vec![format!("-mcpu={cpu}")],
+    let flag = match target_arch {
+        "x86_64" => format!("-march={cpu}"),
+        "aarch64" => format!("-mcpu={cpu}"),
         other => panic!("SVT-AV1 has no CPU flag for `-C target-cpu={cpu}` on {other}"),
     };
 
     if !is_clang_cl {
-        return flags;
+        return vec![flag];
     }
 
-    flags.iter().map(|flag| format!("/clang:{flag}")).collect()
+    vec![format!("/clang:{flag}")]
+}
+
+/// Whether clang claims [SVT_ELF_CODEGEN_FLAGS](crate::cpu::SVT_ELF_CODEGEN_FLAGS) for this target OS.
+pub fn takes_elf_codegen_flags(target_os: &str) -> bool {
+    ELF_CODEGEN_OSES.contains(&target_os)
 }
 
 /// The flags SVT's C compiles add to their base flags, the codegen flags then `cpu_flags`.
 ///
 /// clang-cl takes only the CPU flags.
-pub fn svt_c_flags(cpu_flags: &[String], is_clang_cl: bool) -> Vec<String> {
+pub fn svt_c_flags(cpu_flags: &[String], is_clang_cl: bool, target_os: &str) -> Vec<String> {
     let mut flags = Vec::new();
 
     if !is_clang_cl {
         let codegen_flags = SVT_CODEGEN_FLAGS.iter().map(|flag| flag.to_string());
         flags.extend(codegen_flags);
+    }
+
+    if !is_clang_cl && takes_elf_codegen_flags(target_os) {
+        let elf_flags = SVT_ELF_CODEGEN_FLAGS.iter().map(|flag| flag.to_string());
+        flags.extend(elf_flags);
     }
 
     flags.extend_from_slice(cpu_flags);

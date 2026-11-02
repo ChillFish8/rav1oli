@@ -45,12 +45,13 @@ fn main() -> anyhow::Result<()> {
         unreachable!("clap requires a subcommand and only knows the ones it parsed");
     };
 
+    // Logging starts before validation, so SVT-AV1's reasons for rejecting a flag are shown.
+    // Safety: Called from main thread
+    unsafe { setup_logging(args.log_level.as_deref()) }
+
     if let Err(error) = args.command.validate(subcommand) {
         exit_with_error(&mut cli, &matches, error);
     }
-
-    // Safety: Called from main thread
-    unsafe { setup_logging(args.log_level.as_deref()) }
 
     tracing::info!("initialising");
 

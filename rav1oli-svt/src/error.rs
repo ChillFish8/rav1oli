@@ -21,6 +21,9 @@ pub enum ParamError {
 
     #[error("{reason}")]
     Requirement { reason: &'static str },
+
+    #[error("SVT-AV1 rejected the flags `{flags}` together (status {status:#x}), see its log for why")]
+    Combination { flags: String, status: i32 },
 }
 
 /// Which of the two distortion grids a [GridError] is about.

@@ -192,6 +192,9 @@ const ENCODER_OWNED: &[&str] = &[
 
 pub(crate) const SVT_SUCCESS: sys::EbErrorType = sys::EB_ErrorNone;
 
+/// The only prediction structure the fork encodes, `RANDOM_ACCESS` in `Source/Lib/Codec/definitions.h`.
+const RANDOM_ACCESS: u8 = 2;
+
 /// Whether rav1oli sets this flag itself, so it cannot be passed through.
 pub fn is_encoder_owned(name: &str) -> bool {
     ENCODER_OWNED.contains(&name)
@@ -203,20 +206,48 @@ pub fn param_names() -> &'static [&'static str] {
 }
 
 /// Checks that the SVT-AV1 flags are accepted by the fork and meet the distortion map requirements.
+///
+/// The flags are also set on an encoder for a nominal 1080p 10-bit 4:2:0 input, which runs the fork's
+/// own checks of how the flags combine.
 pub fn check_params(args: &[String]) -> Result<(), ParamError> {
     let mut guard = DefaultConfig::new()?;
+    apply_nominal_input(&mut guard.config);
 
     apply_params(&mut guard.config, args)?;
+    check_requirements(&guard.config)?;
 
-    check_requirements(&guard.config)
+    // The dry run would otherwise print SVT's settings banner.
+    guard.config.hide_banner = true;
+
+    let handle = guard.handle();
+    // SAFETY: The handle and config are valid. SVT deep-copies the config except for its zones, which the
+    // guard keeps alive until after the handle is released.
+    let status = unsafe { sys::svt_av1_enc_set_parameter(handle, &mut guard.config) };
+    if status != SVT_SUCCESS {
+        let flags = args.join(" ");
+        return Err(ParamError::Combination { flags, status });
+    }
+
+    Ok(())
+}
+
+/// Sets the input fields rav1oli always sets, for a nominal 1080p input.
+fn apply_nominal_input(config: &mut sys::EbSvtAv1EncConfiguration) {
+    config.source_width = 1920;
+    config.source_height = 1080;
+    config.encoder_bit_depth = 10;
+    config.encoder_color_format = sys::EB_YUV420;
+    config.enable_distortion_map = true;
 }
 
 /// Applies SVT-AV1 flags such as `--tune 0` or `--tune=0` to the config.
+///
+/// A token starting with `--` is never taken as a value, as no SVT-AV1 value starts that way.
 pub(crate) fn apply_params(
     config: &mut sys::EbSvtAv1EncConfiguration,
     args: &[String],
 ) -> Result<(), ParamError> {
-    let mut tokens = args.iter();
+    let mut tokens = args.iter().peekable();
 
     while let Some(token) = tokens.next() {
         let is_number = token.parse::<f64>().is_ok();
@@ -243,15 +274,13 @@ pub(crate) fn apply_params(
         }
 
         let value = match inline_value {
-            Some(value) => value,
-            None => match tokens.next() {
-                Some(next) => next.as_str(),
-                None => {
-                    return Err(ParamError::MissingValue {
-                        name: name.to_string(),
-                    });
-                },
-            },
+            Some(value) => Some(value),
+            None => tokens.next_if(|next| !next.starts_with("--")).map(String::as_str),
+        };
+        let Some(value) = value else {
+            return Err(ParamError::MissingValue {
+                name: name.to_string(),
+            });
         };
 
         parse_one(config, name, value)?;
@@ -260,9 +289,17 @@ pub(crate) fn apply_params(
     Ok(())
 }
 
-/// Checks the settings the distortion map depends on.
+/// Checks the settings the distortion map and the fork's single prediction structure depend on.
 pub(crate) fn check_requirements(config: &sys::EbSvtAv1EncConfiguration) -> Result<(), ParamError> {
     let requirements = [
+        (
+            config.pred_structure != RANDOM_ACCESS,
+            "the fork only encodes the random access prediction structure, `pred-struct` 2",
+        ),
+        (
+            config.rtc,
+            "`rtc` forces the low delay prediction structure, which the fork cannot encode",
+        ),
         (
             config.rate_control_mode != sys::SVT_AV1_RC_MODE_CQP_OR_CRF as u8,
             "the distortion map needs CRF rate control",

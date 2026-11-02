@@ -22,6 +22,9 @@ mod params;
 mod pgo;
 #[cfg(svt_pgo_generate)]
 mod profiling;
+#[cfg(test)]
+#[path = "../build/simd.rs"]
+mod simd;
 mod sys;
 #[cfg(test)]
 mod tests;

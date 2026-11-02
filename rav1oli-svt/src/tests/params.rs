@@ -31,15 +31,18 @@ fn an_equals_form_is_accepted() {
 #[test]
 fn an_unknown_name_is_an_error() {
     let error = check(&["--not-a-thing", "1"]).unwrap_err();
-    let message = error.to_string();
+    let ParamError::Unknown { name } = error else {
+        panic!("expected Unknown, got {error:?}");
+    };
 
-    assert!(matches!(error, ParamError::Unknown { .. }), "{error:?}");
-    assert!(message.contains("not-a-thing"), "{message}");
+    assert_eq!(name, "not-a-thing");
 }
 
 #[test]
 fn list_flags_that_allocate_are_accepted_and_released() {
     let result = check(&[
+        "--sframe-mode",
+        "flexible",
         "--sframe-posi",
         "10,20",
         "--sframe-qp",
@@ -69,6 +72,22 @@ fn a_flag_without_a_value_is_an_error() {
     };
 
     assert_eq!(name, "tune");
+}
+
+#[test]
+fn a_flag_followed_by_another_flag_is_missing_its_value() {
+    let error = check(&["--enable-qm", "--tune", "0"]).unwrap_err();
+    let ParamError::MissingValue { name } = error else {
+        panic!("expected MissingValue, got {error:?}");
+    };
+
+    assert_eq!(name, "enable-qm");
+}
+
+#[test]
+fn a_single_dash_value_is_taken() {
+    let result = check(&["--qindex-offsets", "-3,-2,0", "--sharpness", "-1"]);
+    assert!(result.is_ok(), "{result:?}");
 }
 
 #[test]
@@ -153,6 +172,28 @@ fn resize_breaks_a_requirement() {
 fn superres_breaks_a_requirement() {
     let reason = requirement_reason(&["--superres-mode", "1"]);
     assert!(reason.contains("super resolution"), "{reason}");
+}
+
+#[test]
+fn a_low_delay_prediction_structure_breaks_a_requirement() {
+    let reason = requirement_reason(&["--pred-struct", "1"]);
+    assert!(reason.contains("random access"), "{reason}");
+}
+
+#[test]
+fn rtc_breaks_a_requirement() {
+    let reason = requirement_reason(&["--rtc", "1"]);
+    assert!(reason.contains("rtc"), "{reason}");
+}
+
+#[test]
+fn a_combination_svt_rejects_lists_the_flags() {
+    let error = check(&["--tune", "0", "--buf-sz", "5"]).unwrap_err();
+    let ParamError::Combination { flags, .. } = error else {
+        panic!("expected Combination, got {error:?}");
+    };
+
+    assert_eq!(flags, "--tune 0 --buf-sz 5");
 }
 
 #[test]
