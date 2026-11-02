@@ -7,4 +7,4 @@ mod tests;
     not(test),
     expect(unused_imports, reason = "the encode command will use the tables")
 )]
-pub use self::curve::{Curve, Tables};
+pub use self::curve::{Curve, Lookups, Tables};

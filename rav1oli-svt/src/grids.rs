@@ -45,6 +45,14 @@ impl DistortionGrids {
         self.height
     }
 
+    pub fn drops(&self) -> &[u8] {
+        &self.drops
+    }
+
+    pub fn cuts(&self) -> &[u8] {
+        &self.cuts
+    }
+
     pub fn drop_columns(&self) -> usize {
         cells_across(self.width, 64)
     }

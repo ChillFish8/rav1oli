@@ -1,6 +1,11 @@
 mod analysis;
 mod commands;
 mod decode;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the encode command will use the grid builder")
+)]
+mod encoding;
 mod interrupt;
 mod metrics;
 mod progress;
