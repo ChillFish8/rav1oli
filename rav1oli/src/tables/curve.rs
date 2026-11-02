@@ -171,13 +171,15 @@ impl Tables {
     }
 
     /// Errors naming both metrics when `metric` differs from the table's.
-    pub fn check_metric(&self, metric: Metric) -> Result<()> {
+    ///
+    /// `owner` names what the metric came from, such as "the map".
+    pub fn check_metric(&self, metric: Metric, owner: &str) -> Result<()> {
         if self.metric == metric {
             return Ok(());
         }
 
         let table_metric = self.metric;
-        bail!("the table is for {table_metric} but the map was made with {metric}");
+        bail!("the table is for {table_metric} but {owner} uses {metric}");
     }
 
     /// Evaluates both curves at every map score.

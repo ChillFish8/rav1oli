@@ -57,6 +57,39 @@ fn run_paths_must_all_differ() {
 }
 
 #[test]
+fn run_outputs_in_a_missing_directory_are_rejected() {
+    let directory = tempfile::tempdir().unwrap();
+    let missing = directory.path().join("missing");
+    let missing_file = path_text(&missing.join("file"));
+    let existing_file = path_text(&directory.path().join("out.ivf"));
+    let cases = [
+        ("--output", [missing_file.as_str(), "", ""]),
+        ("--map", [existing_file.as_str(), missing_file.as_str(), ""]),
+        (
+            "--keep-encode",
+            [existing_file.as_str(), "", missing_file.as_str()],
+        ),
+    ];
+
+    for (flag, [output, map, keep_encode]) in cases {
+        let mut arguments = vec!["test", "run", "-i", "a.mkv", "-o", output];
+        if !map.is_empty() {
+            arguments.extend_from_slice(&["-m", map]);
+        }
+        if !keep_encode.is_empty() {
+            arguments.extend_from_slice(&["--keep-encode", keep_encode]);
+        }
+        let args = parse_args(&arguments);
+
+        let error = args.validate_paths().expect_err("validation should fail");
+
+        assert_eq!(error.kind(), ErrorKind::ValueValidation, "{flag}");
+        let expected = format!("'{flag}' needs an existing directory");
+        assert!(error.to_string().contains(&expected), "{flag}: {error}");
+    }
+}
+
+#[test]
 fn the_output_and_map_cannot_be_directories() {
     let directory = tempfile::tempdir().unwrap();
     let directory_text = path_text(directory.path());

@@ -14,14 +14,14 @@ use crate::progress::{finish, frame_bar};
 
 /// Encodes every frame of `decoder` to `output`, asking `grids_for` for each frame's grids.
 ///
-/// `pass` names the encode in errors, such as "first pass". Returns the frames written. A failed encode
+/// `pass` names the encode in errors and on its progress bar, such as "first pass". Returns the frames written. A failed encode
 /// removes the partial `output`.
 pub fn encode_video<G>(
     decoder: &mut Decoder,
     source: &SourceVideo,
     settings: &EncoderSettings,
     output: &Path,
-    pass: &str,
+    pass: &'static str,
     grids_for: G,
 ) -> anyhow::Result<u64>
 where
@@ -42,22 +42,22 @@ fn run_encoder<G>(
     decoder: &mut Decoder,
     source: &SourceVideo,
     encoder: Encoder,
-    pass: &str,
+    pass: &'static str,
     grids_for: G,
 ) -> anyhow::Result<u64>
 where
     G: FnMut(usize) -> anyhow::Result<Option<DistortionGrids>>,
 {
     let expected = u64::from(source.frame_count);
-    let bar = frame_bar("encoding", expected);
+    let bar = frame_bar(pass, expected);
 
     let result = encode_frames(decoder, source, encoder, pass, &bar, grids_for);
     let verb = if result.is_ok() {
-        "encoded"
+        format!("{pass} encoded")
     } else {
-        "stopped after"
+        format!("{pass} stopped after")
     };
-    finish(&bar, verb);
+    finish(&bar, &verb);
 
     let written = result?;
     if written != expected {

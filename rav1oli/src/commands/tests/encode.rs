@@ -97,3 +97,21 @@ fn tables_is_optional() {
     assert_eq!(args.tables, None);
     args.validate_paths().expect("distinct paths are valid");
 }
+
+#[test]
+fn the_output_in_a_missing_directory_is_rejected() {
+    let directory = tempfile::tempdir().unwrap();
+    let map = existing_map(directory.path());
+    let output = path_text(&directory.path().join("missing").join("out.ivf"));
+    let args = parse_args(&["test", "encode", "-i", "a.mkv", "-m", &map, "-o", &output]);
+
+    let error = args.validate_paths().expect_err("validation should fail");
+
+    assert_eq!(error.kind(), ErrorKind::ValueValidation);
+    assert!(
+        error
+            .to_string()
+            .contains("'--output' needs an existing directory")
+    );
+    assert!(error.to_string().contains("missing"));
+}

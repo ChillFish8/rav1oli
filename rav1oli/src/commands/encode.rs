@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use clap::Args;
 use clap::error::ErrorKind;
 
-use super::options::{CacheOptions, EncoderOptions};
+use super::options::{CacheOptions, EncoderOptions, tables_error};
 use crate::encoding::{EncodeRequest, encode};
 use crate::interrupt;
 use crate::tables::Tables;
-use crate::video::{check_file_path, is_same_file};
+use crate::video::{check_file_path, check_output_directory, is_same_file};
 
 #[derive(Debug, Args)]
 pub struct EncodeArgs {
@@ -35,6 +35,7 @@ impl EncodeArgs {
     /// Checks the output is a file that does not overwrite an input, the map exists and the tables are valid.
     pub fn validate_paths(&self) -> Result<(), clap::Error> {
         check_file_path("--output", &self.output)?;
+        check_output_directory("--output", &self.output)?;
 
         if is_same_file(&self.output, &self.input) {
             let message = "the arguments '--output' and '--input' must be different files";
@@ -62,8 +63,7 @@ impl EncodeArgs {
         };
 
         if let Err(error) = Tables::load(tables) {
-            let message = format!("invalid value for '--tables': {error:#}");
-            return Err(clap::Error::raw(ErrorKind::ValueValidation, message));
+            return Err(tables_error(&error));
         }
 
         Ok(())

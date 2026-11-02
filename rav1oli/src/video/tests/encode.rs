@@ -23,7 +23,7 @@ fn first_pass_settings(decoder: &mut Decoder, source: &SourceVideo) -> (Frame, E
     (first_frame, settings)
 }
 
-/// Reads the 10-bit luma of `frame` without going through [EncoderPlanes].
+/// Reads the 10-bit luma of `frame` without going through [EncoderPlanes](crate::video::planes::EncoderPlanes).
 fn ten_bit_luma(frame: &Frame) -> Vec<u16> {
     let width = frame.ss_mod_width() as usize;
     let height = frame.ss_mod_height() as usize;

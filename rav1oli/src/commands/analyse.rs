@@ -6,7 +6,7 @@ use clap::error::ErrorKind;
 use super::options::{AnalysisOptions, CacheOptions, EncoderOptions};
 use crate::analysis::{AnalyseRequest, analyse};
 use crate::interrupt;
-use crate::video::{check_file_path, is_same_file};
+use crate::video::{check_file_path, check_output_directory, is_same_file};
 
 #[derive(Debug, Args)]
 pub struct AnalyseArgs {
@@ -34,8 +34,10 @@ impl AnalyseArgs {
     /// Checks the output paths are files that do not overwrite the input or each other.
     pub fn validate_paths(&self) -> Result<(), clap::Error> {
         check_file_path("--map", &self.map)?;
+        check_output_directory("--map", &self.map)?;
         if let Some(keep_encode) = &self.keep_encode {
             check_file_path("--keep-encode", keep_encode)?;
+            check_output_directory("--keep-encode", keep_encode)?;
         }
 
         if is_same_file(&self.map, &self.input) {

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use rav1oli_table::FrameRate;
 
-use super::{encoder_options, write_synthetic_map};
+use super::{encoder_options, write_constant_map, write_synthetic_map};
 use crate::commands::options::EncoderOptions;
 use crate::decode::tests::{copy_fixture, copy_ten_bit_fixture};
 use crate::decode::{CacheLocation, Decoder};
@@ -67,6 +67,25 @@ fn encode_writes_an_output_matching_the_source() {
     assert_eq!((properties.ss_mod_width, properties.ss_mod_height), (64, 64));
     assert_eq!(outcome.bytes, std::fs::metadata(&output).unwrap().len());
     assert!(outcome.bytes > 0);
+}
+
+#[test]
+fn higher_map_scores_change_the_encoded_size() {
+    let directory = tempfile::tempdir().unwrap();
+    let video = copy_fixture(directory.path());
+    let low_map = write_constant_map(&video, &directory.path().join("low.parquet"), 40, 0);
+    let high_map = write_constant_map(&video, &directory.path().join("high.parquet"), 40, 255);
+    let low_output = directory.path().join("low.ivf");
+    let high_output = directory.path().join("high.ivf");
+    let encoder = encoder_options(40);
+
+    let low_request = request(&video, &low_map, &low_output, None, &encoder);
+    let high_request = request(&video, &high_map, &high_output, None, &encoder);
+
+    let low = encode(&low_request).unwrap();
+    let high = encode(&high_request).unwrap();
+
+    assert!(high.bytes > low.bytes, "{} vs {}", high.bytes, low.bytes);
 }
 
 #[test]

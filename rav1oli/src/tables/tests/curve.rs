@@ -162,12 +162,13 @@ fn a_single_point_is_constant() {
 #[test]
 fn a_table_for_another_metric_is_an_error() {
     let tables = Tables::default_for(Metric::Cvvdp);
-    let error = tables.check_metric(Metric::Butteraugli).unwrap_err();
+    let error = tables.check_metric(Metric::Butteraugli, "--metric").unwrap_err();
     let message = format!("{error:#}");
 
     assert!(message.contains("cvvdp"), "{message}");
     assert!(message.contains("butteraugli"), "{message}");
-    assert!(tables.check_metric(Metric::Cvvdp).is_ok());
+    assert!(message.contains("--metric"), "{message}");
+    assert!(tables.check_metric(Metric::Cvvdp, "--metric").is_ok());
 }
 
 #[test]

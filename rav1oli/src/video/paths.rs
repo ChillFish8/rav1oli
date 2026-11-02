@@ -16,6 +16,19 @@ pub fn check_file_path(flag: &str, path: &Path) -> Result<(), clap::Error> {
     Err(clap::Error::raw(ErrorKind::ValueValidation, message))
 }
 
+/// Rejects an output path whose directory does not exist.
+pub fn check_output_directory(flag: &str, path: &Path) -> Result<(), clap::Error> {
+    let directory = sibling_directory(path);
+    if directory.is_dir() {
+        return Ok(());
+    }
+
+    let directory = directory.display();
+    let message =
+        format!("the argument '{flag}' needs an existing directory, but {directory} does not exist");
+    Err(clap::Error::raw(ErrorKind::ValueValidation, message))
+}
+
 /// Compares the paths as given, then as resolved through the file system.
 ///
 /// A path that does not exist yet is resolved through its parent directory.

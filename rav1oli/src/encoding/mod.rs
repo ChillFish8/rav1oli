@@ -11,6 +11,7 @@ pub use self::grids::{GridBuilder, check_frame_index};
 use crate::analysis::{encoder_info, source_info};
 use crate::commands::options::EncoderOptions;
 use crate::decode::{CacheLocation, Decoder};
+use crate::interrupt;
 use crate::metrics::FrameDescription;
 use crate::tables::Tables;
 use crate::video::{
@@ -54,7 +55,7 @@ pub fn encode(request: &EncodeRequest<'_>) -> anyhow::Result<EncodeOutcome> {
         Some(path) => Tables::load(path)?,
         None => Tables::default_for(map_metric),
     };
-    tables.check_metric(map_metric)?;
+    tables.check_metric(map_metric, "the map")?;
     let lookups = tables.lookups(&stored.quantisation);
     tracing::info!(metric = %map_metric, "opened the distortion map");
 
@@ -65,6 +66,7 @@ pub fn encode(request: &EncodeRequest<'_>) -> anyhow::Result<EncodeOutcome> {
     let description = FrameDescription::from_frame(&first_frame);
     let colour = colour_description(&description)?;
     drop(first_frame);
+    interrupt::check()?;
     let hash = hash_source(request.input).context("could not hash the source")?;
     tracing::info!(
         width = source.width,
@@ -91,12 +93,14 @@ pub fn encode(request: &EncodeRequest<'_>) -> anyhow::Result<EncodeOutcome> {
 
     tracing::info!(output = %request.output.display(), "starting the final encode");
     let grids_for = |index: usize| {
-        let map_frame = reader
+        let next_frame = reader
             .next()
-            .with_context(|| format!("the map has no frame for source frame {index}"))?
-            .with_context(|| format!("could not read the map's frame {index}"))?;
+            .with_context(|| format!("the map has no frame for source frame {index}"))?;
+        let map_frame = next_frame.with_context(|| format!("could not read the map's frame {index}"))?;
         check_frame_index(map_frame.index(), index)?;
-        let grids = grid_builder.build(map_frame.scores())?;
+
+        let scores = map_frame.scores();
+        let grids = grid_builder.build(scores)?;
 
         Ok(Some(grids))
     };
@@ -111,9 +115,9 @@ pub fn encode(request: &EncodeRequest<'_>) -> anyhow::Result<EncodeOutcome> {
     tracing::info!("finished the final encode");
 
     persist(temporary_output, request.output)?;
-    let bytes = std::fs::metadata(request.output)
-        .with_context(|| format!("could not read the size of {}", request.output.display()))?
-        .len();
+    let size_context = || format!("could not read the size of {}", request.output.display());
+    let output_metadata = std::fs::metadata(request.output).with_context(size_context)?;
+    let bytes = output_metadata.len();
     let kbps = average_kbps(bytes, frames, &source);
     tracing::info!(frames, bytes, kbps, "wrote the final encode");
 

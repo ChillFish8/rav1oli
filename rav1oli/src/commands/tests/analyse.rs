@@ -182,3 +182,42 @@ fn a_symlink_to_the_input_is_rejected() {
             .contains("the arguments '--map' and '--input' must be different files")
     );
 }
+
+#[test]
+fn a_map_in_a_missing_directory_is_rejected() {
+    let directory = tempfile::tempdir().unwrap();
+    let map = path_text(&directory.path().join("missing").join("map.parquet"));
+    let args = parse_args(&["test", "analyse", "-i", "a.mkv", "-m", &map]);
+
+    let error = args.validate_paths().expect_err("validation should fail");
+
+    assert_eq!(error.kind(), ErrorKind::ValueValidation);
+    assert!(error.to_string().contains("'--map' needs an existing directory"));
+    assert!(error.to_string().contains("missing"));
+}
+
+#[test]
+fn a_kept_encode_in_a_missing_directory_is_rejected() {
+    let directory = tempfile::tempdir().unwrap();
+    let kept = path_text(&directory.path().join("missing").join("kept.ivf"));
+    let arguments = [
+        "test",
+        "analyse",
+        "-i",
+        "a.mkv",
+        "-m",
+        "b",
+        "--keep-encode",
+        &kept,
+    ];
+    let args = parse_args(&arguments);
+
+    let error = args.validate_paths().expect_err("validation should fail");
+
+    assert_eq!(error.kind(), ErrorKind::ValueValidation);
+    assert!(
+        error
+            .to_string()
+            .contains("'--keep-encode' needs an existing directory")
+    );
+}

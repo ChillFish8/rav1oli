@@ -33,6 +33,17 @@ fn statistics(value: f64) -> Statistics {
 
 /// Writes a Butteraugli map for `video` at `map` without scoring, with scores rising each frame.
 pub(crate) fn write_synthetic_map(video: &Path, map: &Path, crf: u8) -> PathBuf {
+    write_map(video, map, crf, |frame, block| {
+        (frame * 20 + block * 2).min(255) as u8
+    })
+}
+
+/// Writes a Butteraugli map for `video` at `map` where every block scores `score`.
+pub(crate) fn write_constant_map(video: &Path, map: &Path, crf: u8, score: u8) -> PathBuf {
+    write_map(video, map, crf, |_, _| score)
+}
+
+fn write_map(video: &Path, map: &Path, crf: u8, score_for: impl Fn(usize, usize) -> u8) -> PathBuf {
     let decoder = Decoder::open_uncached(video).unwrap();
     let source = describe_source(decoder.properties()).unwrap();
     let hash = hash_source(video).unwrap();
@@ -47,7 +58,7 @@ pub(crate) fn write_synthetic_map(video: &Path, map: &Path, crf: u8) -> PathBuf 
     let mut writer = MapWriter::create(map, &metadata).unwrap();
     for frame in 0..source.frame_count {
         let scores: Vec<u8> = (0..blocks)
-            .map(|block| (frame as usize * 20 + block * 2).min(255) as u8)
+            .map(|block| score_for(frame as usize, block))
             .collect();
         let value = f64::from(frame) + 1.0;
         let frame_scores = FrameScores::Butteraugli {

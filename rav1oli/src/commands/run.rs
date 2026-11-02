@@ -4,12 +4,12 @@ use clap::Args;
 use clap::error::ErrorKind;
 use rav1oli_table::Metric;
 
-use super::options::{AnalysisOptions, CacheOptions, EncoderOptions};
+use super::options::{AnalysisOptions, CacheOptions, EncoderOptions, tables_error};
 use crate::analysis::{AnalyseRequest, analyse};
 use crate::encoding::{EncodeOutcome, EncodeRequest, encode};
 use crate::interrupt;
 use crate::tables::Tables;
-use crate::video::{check_file_path, is_same_file, temporary_sibling};
+use crate::video::{check_file_path, check_output_directory, is_same_file, temporary_sibling};
 
 #[derive(Debug, Args)]
 pub struct RunArgs {
@@ -42,20 +42,27 @@ pub struct RunArgs {
 }
 
 impl RunArgs {
-    /// Checks the output paths are files that do not overwrite an input or each other and the tables are valid.
+    /// Checks the outputs are files in existing directories that do not overwrite each other or the input,
+    /// and the tables are valid.
     pub fn validate_paths(&self) -> Result<(), clap::Error> {
         check_file_path("--output", &self.output)?;
+        check_output_directory("--output", &self.output)?;
+
         if let Some(map) = &self.map {
             check_file_path("--map", map)?;
+            check_output_directory("--map", map)?;
         }
+
         if let Some(keep_encode) = &self.keep_encode {
             check_file_path("--keep-encode", keep_encode)?;
+            check_output_directory("--keep-encode", keep_encode)?;
         }
 
         let mut paths = vec![("--input", &self.input), ("--output", &self.output)];
         if let Some(map) = &self.map {
             paths.push(("--map", map));
         }
+
         if let Some(keep_encode) = &self.keep_encode {
             paths.push(("--keep-encode", keep_encode));
         }
@@ -76,16 +83,12 @@ impl RunArgs {
 
         let loaded = match Tables::load(tables) {
             Ok(loaded) => loaded,
-            Err(error) => {
-                let message = format!("invalid value for '--tables': {error:#}");
-                return Err(clap::Error::raw(ErrorKind::ValueValidation, message));
-            },
+            Err(error) => return Err(tables_error(&error)),
         };
 
         let metric = Metric::from(self.analysis.metric);
-        if let Err(error) = loaded.check_metric(metric) {
-            let message = format!("invalid value for '--tables': {error:#}");
-            return Err(clap::Error::raw(ErrorKind::ValueValidation, message));
+        if let Err(error) = loaded.check_metric(metric, "--metric") {
+            return Err(tables_error(&error));
         }
 
         Ok(())
@@ -112,6 +115,7 @@ pub fn run(args: &RunArgs) -> anyhow::Result<EncodeOutcome> {
         cache: args.cache.location(),
     };
     analyse(&analyse_request)?;
+    interrupt::check()?;
 
     let encode_request = EncodeRequest {
         input: &args.input,

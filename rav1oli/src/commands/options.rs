@@ -8,6 +8,12 @@ use super::passthrough::{long_flags, validate_svt_args};
 use crate::decode::CacheLocation;
 use crate::metrics::{BUTTERAUGLI_QUANTISATION, CVVDP_QUANTISATION};
 
+/// The error for an invalid `--tables` file.
+pub fn tables_error(error: &anyhow::Error) -> clap::Error {
+    let message = format!("invalid value for '--tables': {error:#}");
+    clap::Error::raw(ErrorKind::ValueValidation, message)
+}
+
 /// The display brightness in nits Butteraugli assumes when `--intensity-target` is not set.
 pub const DEFAULT_INTENSITY_TARGET: f32 = 203.0;
 
