@@ -40,6 +40,7 @@ impl Command {
                 args.encoder.validate(subcommand)
             },
             Command::Run(args) => {
+                args.validate_paths()?;
                 args.analysis.validate()?;
                 args.encoder.validate(subcommand)
             },

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::error::ErrorKind;
 use clap::{Args, ValueEnum};
-use rav1oli_table::Quantisation;
+use rav1oli_table::{Metric as TableMetric, Quantisation};
 
 use super::passthrough::{long_flags, validate_svt_args};
 use crate::decode::CacheLocation;
@@ -17,6 +17,15 @@ pub enum Metric {
     #[default]
     Cvvdp,
     Butteraugli,
+}
+
+impl From<Metric> for TableMetric {
+    fn from(metric: Metric) -> Self {
+        match metric {
+            Metric::Cvvdp => TableMetric::Cvvdp,
+            Metric::Butteraugli => TableMetric::Butteraugli,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Args)]

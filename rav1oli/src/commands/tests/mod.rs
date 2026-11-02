@@ -2,12 +2,14 @@ mod analyse;
 mod encode;
 mod options;
 mod passthrough;
+mod run;
 
 use clap::Parser;
 
 use super::Command;
 use super::analyse::AnalyseArgs;
 use super::encode::EncodeArgs;
+use super::run::RunArgs;
 
 #[derive(Debug, Parser)]
 struct TestCli {
@@ -32,5 +34,15 @@ pub(crate) fn parse_encode_args(arguments: &[&str]) -> EncodeArgs {
     match cli.command {
         Command::Encode(args) => args,
         _ => panic!("expected the encode command"),
+    }
+}
+
+/// Parses `arguments` as a `run` command line.
+pub(crate) fn parse_run_args(arguments: &[&str]) -> RunArgs {
+    let cli = TestCli::try_parse_from(arguments).expect("arguments should parse");
+
+    match cli.command {
+        Command::Run(args) => args,
+        _ => panic!("expected the run command"),
     }
 }

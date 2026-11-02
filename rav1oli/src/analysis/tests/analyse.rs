@@ -60,7 +60,8 @@ fn analyse_writes_a_map_matching_the_source() {
     let kept_text = path_text(&kept);
     let args = butteraugli_args(&video, &map, gpu_id(), &["--keep-encode", &kept_text]);
 
-    let summary = analyse(&args).unwrap();
+    let request = args.request();
+    let summary = analyse(&request).unwrap();
 
     assert!(matches!(summary, MapSummary::Butteraugli { .. }));
     let reader = MapReader::open(&map).unwrap();
@@ -103,7 +104,8 @@ fn a_failed_analyse_leaves_no_files() {
     ];
     let args = parse_args(&arguments);
 
-    analyse(&args).unwrap_err();
+    let request = args.request();
+    analyse(&request).unwrap_err();
 
     assert_eq!(std::fs::read(&map).unwrap(), b"existing map");
     let names = file_names(directory.path());
@@ -124,7 +126,8 @@ fn a_failure_after_the_temporary_map_exists_leaves_no_files() {
     let kept_text = path_text(&kept);
     let args = butteraugli_args(&video, &map, gpu_id(), &["--keep-encode", &kept_text]);
 
-    let error = analyse(&args).unwrap_err();
+    let request = args.request();
+    let error = analyse(&request).unwrap_err();
 
     assert!(
         error
@@ -147,7 +150,8 @@ fn a_temporary_encode_is_removed() {
     let map = directory.path().join("map.parquet");
     let args = butteraugli_args(&video, &map, gpu_id(), &[]);
 
-    analyse(&args).unwrap();
+    let request = args.request();
+    analyse(&request).unwrap();
 
     let names = file_names(directory.path());
     assert!(names.iter().all(|name| !name.ends_with(".ivf")));
@@ -163,7 +167,8 @@ fn a_missing_map_directory_fails_before_the_encode() {
     let kept_text = path_text(&kept);
     let args = butteraugli_args(&video, &map, gpu_id(), &["--keep-encode", &kept_text]);
 
-    analyse(&args).unwrap_err();
+    let request = args.request();
+    analyse(&request).unwrap_err();
 
     assert!(!kept.exists());
 }

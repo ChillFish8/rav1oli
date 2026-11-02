@@ -4,6 +4,8 @@ mod settings;
 #[cfg(test)]
 mod tests;
 
+use std::path::Path;
+
 use anyhow::Context;
 use rav1oli_table::{MapSummary, MapWriter, hash_source};
 
@@ -13,32 +15,42 @@ pub use self::scoring::check_frame_counts;
 use self::scoring::score_frames;
 use self::settings::metric_config;
 pub use self::settings::{encoder_info, map_metadata, source_info};
-use crate::commands::analyse::AnalyseArgs;
-use crate::decode::Decoder;
+use crate::commands::options::{AnalysisOptions, EncoderOptions};
+use crate::decode::{CacheLocation, Decoder};
 use crate::metrics::FrameDescription;
 use crate::video::{colour_description, describe_source, encoder_settings, persist, temporary_sibling};
 
+/// What the first-pass encode reads and writes.
+pub struct AnalyseRequest<'a> {
+    pub input: &'a Path,
+    pub map: &'a Path,
+    pub keep_encode: Option<&'a Path>,
+    pub analysis: &'a AnalysisOptions,
+    pub encoder: &'a EncoderOptions,
+    pub cache: CacheLocation,
+}
+
 /// Runs the first-pass encode of the source and scores it into a distortion map.
-pub fn analyse(args: &AnalyseArgs) -> anyhow::Result<MapSummary> {
-    let gpu = args.analysis.gpu;
+pub fn analyse(request: &AnalyseRequest<'_>) -> anyhow::Result<MapSummary> {
+    let gpu = request.analysis.gpu;
     tracing::info!(gpu, "checking the GPU");
     rav1oli_vship::check_device(gpu).with_context(|| format!("failed to check GPU {gpu}"))?;
     tracing::info!(gpu, "checked the GPU");
 
     // Created before any long running work so an unwritable map directory fails early. Both temporary
     // files are held until the end so they are deleted whether the run succeeds or fails.
-    let temporary_map = temporary_sibling(&args.map, ".tmp")?;
-    let (encode_path, _temporary_encode) = match &args.keep_encode {
-        Some(path) => (path.clone(), None),
+    let temporary_map = temporary_sibling(request.map, ".tmp")?;
+    let (encode_path, _temporary_encode) = match request.keep_encode {
+        Some(path) => (path.to_path_buf(), None),
         None => {
-            let temporary = temporary_sibling(&args.map, ".ivf")?;
+            let temporary = temporary_sibling(request.map, ".ivf")?;
             (temporary.to_path_buf(), Some(temporary))
         },
     };
 
-    tracing::info!(input = %args.input.display(), "opening the source");
-    let cache = args.cache.location();
-    let mut source_decoder = Decoder::open(&args.input, &cache)?;
+    tracing::info!(input = %request.input.display(), "opening the source");
+    let cache = &request.cache;
+    let mut source_decoder = Decoder::open(request.input, cache)?;
     let source = describe_source(source_decoder.properties())?;
     let first_frame = source_decoder
         .frames()
@@ -55,10 +67,10 @@ pub fn analyse(args: &AnalyseArgs) -> anyhow::Result<MapSummary> {
     );
 
     tracing::info!("building the settings");
-    let config = metric_config(&args.analysis, &source)?;
-    let settings = encoder_settings(&source, colour, &args.encoder);
-    let hash = hash_source(&args.input).context("could not hash the source")?;
-    let metadata = map_metadata(&source, hash, &args.encoder, &config);
+    let config = metric_config(request.analysis, &source)?;
+    let settings = encoder_settings(&source, colour, request.encoder);
+    let hash = hash_source(request.input).context("could not hash the source")?;
+    let metadata = map_metadata(&source, hash, request.encoder, &config);
     tracing::info!(hash = %metadata.source.hash, "built the settings");
 
     tracing::info!(output = %encode_path.display(), "starting the first-pass encode");
@@ -66,8 +78,8 @@ pub fn analyse(args: &AnalyseArgs) -> anyhow::Result<MapSummary> {
     tracing::info!("finished the first-pass encode");
 
     tracing::info!("starting scoring");
-    let mut encoded_decoder = match &args.keep_encode {
-        Some(path) => Decoder::open(path, &cache)?,
+    let mut encoded_decoder = match request.keep_encode {
+        Some(path) => Decoder::open(path, cache)?,
         None => Decoder::open_uncached(&encode_path)?,
     };
 
@@ -81,10 +93,10 @@ pub fn analyse(args: &AnalyseArgs) -> anyhow::Result<MapSummary> {
     )?;
     log_summary(&summary);
 
-    tracing::info!(map = %args.map.display(), "writing the distortion map");
+    tracing::info!(map = %request.map.display(), "writing the distortion map");
     writer.finish(&summary).context("could not finish the map")?;
-    persist(temporary_map, &args.map)?;
-    tracing::info!(map = %args.map.display(), "wrote the distortion map");
+    persist(temporary_map, request.map)?;
+    tracing::info!(map = %request.map.display(), "wrote the distortion map");
 
     Ok(summary)
 }

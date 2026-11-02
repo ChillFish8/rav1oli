@@ -4,7 +4,7 @@ use clap::Args;
 use clap::error::ErrorKind;
 
 use super::options::{AnalysisOptions, CacheOptions, EncoderOptions};
-use crate::analysis::analyse;
+use crate::analysis::{AnalyseRequest, analyse};
 use crate::interrupt;
 use crate::video::{check_file_path, is_same_file};
 
@@ -59,12 +59,24 @@ impl AnalyseArgs {
 
         Ok(())
     }
+
+    pub fn request(&self) -> AnalyseRequest<'_> {
+        AnalyseRequest {
+            input: &self.input,
+            map: &self.map,
+            keep_encode: self.keep_encode.as_deref(),
+            analysis: &self.analysis,
+            encoder: &self.encoder,
+            cache: self.cache.location(),
+        }
+    }
 }
 
 pub fn execute(args: AnalyseArgs) -> anyhow::Result<()> {
     tracing::debug!(?args, "running analyse");
     interrupt::install()?;
 
-    analyse(&args)?;
+    let request = args.request();
+    analyse(&request)?;
     Ok(())
 }
