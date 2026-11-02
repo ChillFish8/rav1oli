@@ -31,3 +31,5 @@ parquet = { version = "60.1", default-features = false, features = ["arrow", "zs
 serde = { version = "1", features = ["derive"] }
 
 rav1oli-bestsource = { path = "rav1oli-bestsource" }
+rav1oli-table = { path = "rav1oli-table" }
+rav1oli-vship = { path = "rav1oli-vship" }

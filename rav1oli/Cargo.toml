@@ -14,6 +14,8 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 rav1oli-bestsource = { workspace = true }
+rav1oli-table = { workspace = true }
+rav1oli-vship = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

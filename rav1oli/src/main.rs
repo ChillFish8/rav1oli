@@ -1,6 +1,8 @@
 mod commands;
 #[cfg_attr(not(test), expect(dead_code, reason = "the decoder is only used by tests"))]
 mod decode;
+#[cfg_attr(not(test), expect(dead_code, reason = "the metrics are only used by tests"))]
+mod metrics;
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 
