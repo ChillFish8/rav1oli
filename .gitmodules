@@ -7,3 +7,6 @@
 [submodule "rav1oli-bestsource/vendor/libp2p"]
 	path = rav1oli-bestsource/vendor/libp2p
 	url = https://github.com/sekrit-twc/libp2p.git
+[submodule "rav1oli-svt/vendor/svt-av1"]
+	path = rav1oli-svt/vendor/svt-av1
+	url = https://github.com/ChillFish8/SVT-AV1-Essential.git

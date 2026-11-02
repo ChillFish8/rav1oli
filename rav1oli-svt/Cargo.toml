@@ -4,5 +4,25 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 readme.workspace = true
+description = "AV1 encoding through the SVT-AV1-Essential fork."
+include = [
+    "Cargo.toml",
+    "build.rs",
+    "build/**",
+    "src/**",
+    "include/**",
+    "vendor/svt-av1/LICENSE*",
+    "vendor/svt-av1/PATENTS*",
+    "vendor/svt-av1/CMakeLists.txt",
+    "vendor/svt-av1/cmake/**",
+    "vendor/svt-av1/Source/**",
+    "vendor/svt-av1/third_party/fastfeat/**",
+    "vendor/svt-av1/third_party/safestringlib/**",
+]
 
 [dependencies]
+
+[build-dependencies]
+bindgen = { workspace = true }
+cc = { workspace = true }
+cmake = { workspace = true }
