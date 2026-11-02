@@ -24,12 +24,7 @@ pub use self::display::{SelectedDisplay, select_display};
     expect(unused_imports, reason = "the scorer is only driven by the GPU tests")
 )]
 pub use self::scorer::MetricScorer;
-pub use self::scorer::{BUTTERAUGLI_QUANTISATION, CVVDP_QUANTISATION};
-#[cfg_attr(
-    not(test),
-    expect(unused_imports, reason = "the metric settings are only used by tests")
-)]
-pub use self::scorer::{MetricConfig, metric_settings};
+pub use self::scorer::{BUTTERAUGLI_QUANTISATION, CVVDP_QUANTISATION, MetricConfig, metric_settings};
 #[cfg_attr(
     not(test),
     expect(unused_imports, reason = "the statistics are only used by tests")

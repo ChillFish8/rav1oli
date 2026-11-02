@@ -1,6 +1,6 @@
 mod analyse;
 mod encode;
-mod options;
+pub mod options;
 pub mod passthrough;
 mod run;
 #[cfg(test)]

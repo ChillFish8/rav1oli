@@ -1,3 +1,8 @@
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the analysis settings are only used by tests")
+)]
+mod analysis;
 mod commands;
 #[cfg_attr(not(test), expect(dead_code, reason = "the decoder is only used by tests"))]
 mod decode;
