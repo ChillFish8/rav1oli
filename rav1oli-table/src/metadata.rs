@@ -148,6 +148,7 @@ struct StoredMetadata {
     version: u32,
     #[serde(flatten)]
     metadata: MapMetadata,
+    summary: MapSummary,
 }
 
 #[derive(Deserialize)]
@@ -224,24 +225,25 @@ impl MapMetadata {
         Ok(mismatches)
     }
 
-    pub(crate) fn to_json(&self) -> Result<String, TableError> {
+    pub(crate) fn to_json(&self, summary: &MapSummary) -> Result<String, TableError> {
         let stored = StoredMetadata {
             version: FORMAT_VERSION,
             metadata: self.clone(),
+            summary: summary.clone(),
         };
         let json = serde_json::to_string(&stored)?;
         Ok(json)
     }
 
     /// Decodes the footer metadata, checking the version before the rest of the layout.
-    pub(crate) fn from_json(json: &str) -> Result<Self, TableError> {
+    pub(crate) fn from_json(json: &str) -> Result<(Self, MapSummary), TableError> {
         let stored_version: StoredVersion = serde_json::from_str(json)?;
         if stored_version.version != FORMAT_VERSION {
             return Err(TableError::UnsupportedVersion(stored_version.version));
         }
 
         let stored: StoredMetadata = serde_json::from_str(json)?;
-        Ok(stored.metadata)
+        Ok((stored.metadata, stored.summary))
     }
 }
 
@@ -453,15 +455,19 @@ mod tests {
     fn json_round_trips() {
         let metadata = sample_metadata();
 
-        let json = metadata.to_json().unwrap();
-        let decoded = MapMetadata::from_json(&json).unwrap();
+        let summary = MapSummary::CvvdpTemporal { score: 9.7 };
+
+        let json = metadata.to_json(&summary).unwrap();
+        let (decoded, decoded_summary) = MapMetadata::from_json(&json).unwrap();
 
         assert_eq!(decoded, metadata);
+        assert_eq!(decoded_summary, summary);
     }
 
     #[test]
     fn from_json_rejects_other_versions() {
-        let json = sample_metadata().to_json().unwrap();
+        let summary = MapSummary::CvvdpTemporal { score: 9.7 };
+        let json = sample_metadata().to_json(&summary).unwrap();
         let json = json.replace("\"version\":1", "\"version\":99");
 
         let result = MapMetadata::from_json(&json);

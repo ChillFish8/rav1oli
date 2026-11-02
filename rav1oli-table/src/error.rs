@@ -1,7 +1,7 @@
 use arrow_schema::ArrowError;
 use parquet::errors::ParquetError;
 
-use crate::metadata::FORMAT_VERSION;
+use crate::metadata::{FORMAT_VERSION, Metric};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TableError {
@@ -31,4 +31,8 @@ pub enum TableError {
     FrameSizeMismatch { expected: usize, actual: usize },
     #[error("expected {expected} frames but got {actual}")]
     FrameCountMismatch { expected: u64, actual: u64 },
+    #[error("the frame scores do not match the {expected} metric of the distortion map")]
+    FrameScoresMismatch { expected: Metric },
+    #[error("the summary does not match the {expected} metric of the distortion map")]
+    SummaryMismatch { expected: Metric },
 }

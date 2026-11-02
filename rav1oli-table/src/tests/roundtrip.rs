@@ -2,7 +2,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow_array::{RecordBatch, UInt32Array};
+use arrow_array::{ArrayRef, BinaryArray, Float64Array, RecordBatch, UInt32Array};
 use arrow_schema::{DataType, Field, Schema};
 use parquet::arrow::ArrowWriter;
 use parquet::file::metadata::KeyValue;
@@ -10,7 +10,45 @@ use parquet::file::properties::WriterProperties;
 
 use crate::metadata::METADATA_KEY;
 use crate::tests::sample_metadata;
-use crate::{MapMetadata, MapReader, MapWriter, TableError};
+use crate::{FrameScores, MapMetadata, MapReader, MapSummary, MapWriter, Metric, Statistics, TableError};
+
+fn cvvdp_scores(seed: u32) -> FrameScores {
+    FrameScores::Cvvdp {
+        score: 9.9 - f64::from(seed) * 0.1,
+    }
+}
+
+fn cvvdp_summary() -> MapSummary {
+    MapSummary::CvvdpTemporal { score: 9.7 }
+}
+
+fn sample_statistics(offset: f64) -> Statistics {
+    Statistics {
+        average: 1.0 + offset,
+        standard_deviation: 2.0 + offset,
+        median: 3.0 + offset,
+        percentile_5: 4.0 + offset,
+        percentile_95: 5.0 + offset,
+        minimum: 6.0 + offset,
+        maximum: 7.0 + offset,
+    }
+}
+
+fn butteraugli_metadata() -> MapMetadata {
+    let mut metadata = sample_metadata();
+    metadata.metric.metric = Metric::Butteraugli;
+    metadata.metric.temporal = false;
+    metadata
+}
+
+fn butteraugli_scores(seed: u32) -> FrameScores {
+    let base = f64::from(seed);
+    FrameScores::Butteraugli {
+        norm_q: base + 0.1,
+        norm3: base + 0.2,
+        norm_inf: base + 0.3,
+    }
+}
 
 fn frame_scores(metadata: &MapMetadata, seed: u8) -> Vec<u8> {
     let blocks = metadata.source.blocks_per_frame();
@@ -22,10 +60,11 @@ fn write_map(path: &Path, metadata: &MapMetadata) {
 
     for seed in 0..metadata.source.frame_count {
         let scores = frame_scores(metadata, seed as u8);
-        writer.write_frame(&scores).unwrap();
+        writer.write_frame(&scores, cvvdp_scores(seed)).unwrap();
     }
 
-    writer.finish().unwrap();
+    let summary = cvvdp_summary();
+    writer.finish(&summary).unwrap();
 }
 
 fn write_plain_parquet(path: &Path, footer: Option<Vec<KeyValue>>) {
@@ -93,7 +132,7 @@ fn write_frame_rejects_wrong_size() {
     let metadata = sample_metadata();
     let mut writer = MapWriter::create(&path, &metadata).unwrap();
 
-    let result = writer.write_frame(&[0; 10]);
+    let result = writer.write_frame(&[0; 10], FrameScores::Cvvdp { score: 9.9 });
 
     let error = result.unwrap_err();
     assert!(matches!(error, TableError::FrameSizeMismatch { actual: 10, .. }));
@@ -105,12 +144,13 @@ fn write_frame_rejects_extra_frames() {
     let path = directory.path().join("map.parquet");
     let metadata = sample_metadata();
     let scores = frame_scores(&metadata, 0);
+    let frame_scores = FrameScores::Cvvdp { score: 9.9 };
     let mut writer = MapWriter::create(&path, &metadata).unwrap();
     for _ in 0..metadata.source.frame_count {
-        writer.write_frame(&scores).unwrap();
+        writer.write_frame(&scores, frame_scores).unwrap();
     }
 
-    let result = writer.write_frame(&scores);
+    let result = writer.write_frame(&scores, frame_scores);
 
     let error = result.unwrap_err();
     assert!(matches!(
@@ -129,9 +169,12 @@ fn finish_rejects_missing_frames() {
     let metadata = sample_metadata();
     let scores = frame_scores(&metadata, 0);
     let mut writer = MapWriter::create(&path, &metadata).unwrap();
-    writer.write_frame(&scores).unwrap();
+    writer
+        .write_frame(&scores, FrameScores::Cvvdp { score: 9.9 })
+        .unwrap();
 
-    let result = writer.finish();
+    let summary = cvvdp_summary();
+    let result = writer.finish(&summary);
 
     let error = result.unwrap_err();
     assert!(matches!(
@@ -158,11 +201,192 @@ fn open_rejects_file_without_metadata() {
 fn open_rejects_unexpected_columns() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("plain.parquet");
-    let json = sample_metadata().to_json().unwrap();
+    let summary = cvvdp_summary();
+    let json = sample_metadata().to_json(&summary).unwrap();
     let footer = KeyValue::new(METADATA_KEY.to_string(), json);
     write_plain_parquet(&path, Some(vec![footer]));
 
     let result = MapReader::open(&path);
 
     assert!(matches!(result, Err(TableError::InvalidLayout(_))));
+}
+
+#[test]
+fn cvvdp_frame_scores_and_summary_round_trip() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let metadata = sample_metadata();
+    write_map(&path, &metadata);
+
+    let reader = MapReader::open(&path).unwrap();
+    let summary = reader.summary().clone();
+    let frames: Vec<_> = reader.collect::<Result<_, _>>().unwrap();
+
+    let read_scores: Vec<FrameScores> = frames.iter().map(|frame| frame.frame_scores()).collect();
+    let expected: Vec<FrameScores> = (0..3).map(cvvdp_scores).collect();
+    assert_eq!(read_scores, expected);
+    assert_eq!(summary, cvvdp_summary());
+}
+
+#[test]
+fn butteraugli_frame_scores_and_summary_round_trip() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let metadata = butteraugli_metadata();
+    let summary = MapSummary::Butteraugli {
+        norm_q: sample_statistics(0.0),
+        norm3: sample_statistics(1.0),
+        norm_inf: sample_statistics(2.0),
+    };
+    let mut writer = MapWriter::create(&path, &metadata).unwrap();
+
+    for seed in 0..metadata.source.frame_count {
+        let scores = frame_scores(&metadata, seed as u8);
+        writer.write_frame(&scores, butteraugli_scores(seed)).unwrap();
+    }
+
+    writer.finish(&summary).unwrap();
+
+    let reader = MapReader::open(&path).unwrap();
+    let read_summary = reader.summary().clone();
+    let frames: Vec<_> = reader.collect::<Result<_, _>>().unwrap();
+
+    let read_scores: Vec<FrameScores> = frames.iter().map(|frame| frame.frame_scores()).collect();
+    let expected: Vec<FrameScores> = (0..3).map(butteraugli_scores).collect();
+    assert_eq!(read_scores, expected);
+    assert_eq!(read_summary, summary);
+}
+
+#[test]
+fn writing_the_wrong_frame_scores_variant_is_an_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let metadata = sample_metadata();
+    let scores = frame_scores(&metadata, 0);
+    let mut writer = MapWriter::create(&path, &metadata).unwrap();
+
+    let result = writer.write_frame(&scores, butteraugli_scores(0));
+
+    let error = result.unwrap_err();
+    assert!(matches!(
+        error,
+        TableError::FrameScoresMismatch {
+            expected: Metric::Cvvdp
+        }
+    ));
+}
+
+#[test]
+fn finishing_with_the_wrong_summary_is_an_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let mut metadata = sample_metadata();
+    metadata.metric.temporal = false;
+    let mut writer = MapWriter::create(&path, &metadata).unwrap();
+
+    for seed in 0..metadata.source.frame_count {
+        let scores = frame_scores(&metadata, seed as u8);
+        writer.write_frame(&scores, cvvdp_scores(seed)).unwrap();
+    }
+
+    let summary = cvvdp_summary();
+    let result = writer.finish(&summary);
+
+    let error = result.unwrap_err();
+    assert!(matches!(
+        error,
+        TableError::SummaryMismatch {
+            expected: Metric::Cvvdp
+        }
+    ));
+}
+
+#[test]
+fn a_map_whose_writer_was_dropped_cannot_be_opened() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let metadata = sample_metadata();
+    let scores = frame_scores(&metadata, 0);
+    let mut writer = MapWriter::create(&path, &metadata).unwrap();
+    writer.write_frame(&scores, cvvdp_scores(0)).unwrap();
+    drop(writer);
+
+    let result = MapReader::open(&path);
+
+    assert!(matches!(result, Err(TableError::Parquet(_))));
+}
+
+#[test]
+fn metric_columns_must_match_the_metadata() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("shaped.parquet");
+    let metadata = butteraugli_metadata();
+    let summary = cvvdp_summary();
+    let json = metadata.to_json(&summary).unwrap();
+    let footer = KeyValue::new(METADATA_KEY.to_string(), json);
+    let fields = vec![
+        Field::new("frame_index", DataType::UInt32, false),
+        Field::new("scores", DataType::Binary, false),
+        Field::new("score", DataType::Float64, false),
+    ];
+    let schema = Arc::new(Schema::new(fields));
+    let columns: Vec<ArrayRef> = vec![
+        Arc::new(UInt32Array::from(vec![0])),
+        Arc::new(BinaryArray::from(vec![b"a".as_slice()])),
+        Arc::new(Float64Array::from(vec![9.9])),
+    ];
+    let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+    let properties = WriterProperties::builder()
+        .set_key_value_metadata(Some(vec![footer]))
+        .build();
+    let file = File::create(&path).unwrap();
+    let mut writer = ArrowWriter::try_new(file, schema, Some(properties)).unwrap();
+    writer.write(&batch).unwrap();
+    writer.close().unwrap();
+
+    let result = MapReader::open(&path);
+
+    assert!(matches!(result, Err(TableError::InvalidLayout(_))));
+}
+
+#[test]
+fn every_mismatched_summary_is_an_error() {
+    let temporal = MapSummary::CvvdpTemporal { score: 9.7 };
+    let per_frame = MapSummary::CvvdpPerFrame(sample_statistics(0.0));
+    let butteraugli = MapSummary::Butteraugli {
+        norm_q: sample_statistics(0.0),
+        norm3: sample_statistics(1.0),
+        norm_inf: sample_statistics(2.0),
+    };
+    let cases = [
+        (Metric::Cvvdp, true, per_frame.clone()),
+        (Metric::Cvvdp, true, butteraugli.clone()),
+        (Metric::Cvvdp, false, temporal.clone()),
+        (Metric::Cvvdp, false, butteraugli),
+        (Metric::Butteraugli, false, temporal),
+        (Metric::Butteraugli, false, per_frame),
+    ];
+
+    for (metric, is_temporal, summary) in cases {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("map.parquet");
+        let mut metadata = sample_metadata();
+        metadata.metric.metric = metric;
+        metadata.metric.temporal = is_temporal;
+        let mut writer = MapWriter::create(&path, &metadata).unwrap();
+
+        for seed in 0..metadata.source.frame_count {
+            let scores = frame_scores(&metadata, seed as u8);
+            let frame_scores = match metric {
+                Metric::Cvvdp => cvvdp_scores(seed),
+                Metric::Butteraugli => butteraugli_scores(seed),
+            };
+            writer.write_frame(&scores, frame_scores).unwrap();
+        }
+
+        let result = writer.finish(&summary);
+
+        let error = result.unwrap_err();
+        assert!(matches!(error, TableError::SummaryMismatch { .. }));
+    }
 }
