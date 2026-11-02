@@ -59,6 +59,10 @@ clippy *ARGS:
 run *ARGS:
     cargo run --release -- {{ARGS}}
 
+# Runs benchmarks, passing any extra arguments through.
+bench *ARGS:
+    cargo bench {{ARGS}}
+
 # Fetches the vendored Vship, BestSource and libp2p sources at their pinned commits.
 submodules:
     git submodule update --init --recursive
@@ -66,6 +70,22 @@ submodules:
 # Runs tests with nextest, passing any extra arguments through.
 test *ARGS:
     cargo nextest run {{ARGS}}
+
+# Tests the NEON block scores.
+#
+# Any aarch64 host runs them natively. x86_64 Linux needs the `aarch64-unknown-linux-gnu` Rust target,
+# the `aarch64-linux-gnu-gcc` linker and `qemu-aarch64` with the Arm sysroot in `/usr/aarch64-linux-gnu`.
+# No other host can run them.
+test-neon *ARGS:
+    {{ if arch() == "aarch64" {
+        "cargo nextest run -p rav1oli-quantise " + ARGS
+    } else if arch() + os() == "x86_64linux" {
+        "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc " +
+        "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER='qemu-aarch64 -L /usr/aarch64-linux-gnu' " +
+        "cargo nextest run -p rav1oli-quantise --target aarch64-unknown-linux-gnu " + ARGS
+    } else {
+        error("the NEON tests need an aarch64 host, or x86_64 Linux with QEMU")
+    } }}
 
 # Lints and tests the Vship wrapper built statically from its submodule with Vulkan.
 test-vship:

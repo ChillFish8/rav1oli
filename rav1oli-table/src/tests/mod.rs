@@ -1,6 +1,7 @@
 mod metadata;
 mod roundtrip;
 
+use crate::Quantisation;
 use crate::metadata::{
     DisplaySettings,
     EncoderSettings,
@@ -8,7 +9,6 @@ use crate::metadata::{
     MapMetadata,
     Metric,
     MetricSettings,
-    Quantisation,
     SourceInfo,
 };
 

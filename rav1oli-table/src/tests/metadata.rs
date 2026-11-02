@@ -1,6 +1,8 @@
+use rav1oli_quantise::block_scores;
+
 use super::sample_metadata;
 use crate::metadata::DisplaySettings;
-use crate::{MapSummary, Quantisation, Statistics};
+use crate::{FrameRate, MapSummary, Quantisation, SourceInfo, Statistics};
 
 fn sample_statistics(offset: f64) -> Statistics {
     Statistics {
@@ -142,4 +144,29 @@ fn dequantise_inverts_the_scale() {
     assert_eq!(saturated, 8.0);
     assert_eq!(zero, 0.0);
     assert_eq!(middle, 16.0 / 255.0 * 8.0);
+}
+
+#[test]
+fn grid_matches_the_table_layout() {
+    let quantisation = Quantisation {
+        cap: 8.0,
+        floor: 0.5,
+        top: 255,
+    };
+    let (width, height) = (1918_usize, 1080_usize);
+    let values = vec![0.0_f32; width * height];
+    let info = SourceInfo {
+        hash: String::new(),
+        width: width as u32,
+        height: height as u32,
+        frame_count: 1,
+        frame_rate: FrameRate {
+            numerator: 24,
+            denominator: 1,
+        },
+    };
+
+    let codes = block_scores(&values, width, height, &quantisation);
+
+    assert_eq!(codes.len(), info.blocks_per_frame());
 }

@@ -2,8 +2,8 @@
 resolver = "3"
 members = [
     "rav1oli", "rav1oli-bestsource",
-    "rav1oli-svt", "rav1oli-table",
-    "rav1oli-vship"
+    "rav1oli-quantise", "rav1oli-svt",
+    "rav1oli-table", "rav1oli-vship"
 ]
 
 [workspace.package]
@@ -18,6 +18,7 @@ arrow-array = "60.1"
 arrow-schema = "60.1"
 bindgen = "0.73"
 cc = "1.2"
+divan = "0.1.21"
 pkg-config = "0.3"
 serde_json = "1"
 strsim = "0.11"
@@ -32,5 +33,6 @@ parquet = { version = "60.1", default-features = false, features = ["arrow", "zs
 serde = { version = "1", features = ["derive"] }
 
 rav1oli-bestsource = { path = "rav1oli-bestsource" }
+rav1oli-quantise = { path = "rav1oli-quantise" }
 rav1oli-table = { path = "rav1oli-table" }
 rav1oli-vship = { path = "rav1oli-vship" }

@@ -1,12 +1,10 @@
 use std::fmt;
 use std::path::Path;
 
+use rav1oli_quantise::{BLOCK_SIZE, Quantisation};
 use serde::{Deserialize, Serialize};
 
 use crate::error::TableError;
-
-/// The width and height in pixels of the area each score covers.
-pub const BLOCK_SIZE: u32 = 8;
 
 pub(crate) const FORMAT_VERSION: u32 = 1;
 pub(crate) const METADATA_KEY: &str = "rav1oli.map";
@@ -56,50 +54,6 @@ pub struct DisplaySettings {
     pub model: String,
     /// The custom display JSON, when the model came from a display config.
     pub config: Option<String>,
-}
-
-/// Turns a block's metric value into a `u8` score.
-///
-/// Values below `floor` score 0. Other values are clamped between 0 and `cap`, then scaled so `cap`
-/// scores `top`.
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Quantisation {
-    pub cap: f32,
-    pub floor: f32,
-    pub top: u8,
-}
-
-impl Quantisation {
-    /// Checks the scale can be used to quantise and dequantise scores.
-    pub fn check(&self) -> Result<(), TableError> {
-        if !self.cap.is_finite() || self.cap <= 0.0 {
-            return Err(TableError::InvalidQuantisation("cap must be finite and above 0"));
-        }
-
-        if !self.floor.is_finite() || self.floor < 0.0 {
-            return Err(TableError::InvalidQuantisation(
-                "floor must be finite and at least 0",
-            ));
-        }
-
-        if self.floor >= self.cap {
-            return Err(TableError::InvalidQuantisation("floor must be below the cap"));
-        }
-
-        if self.top == 0 {
-            return Err(TableError::InvalidQuantisation("top must be above 0"));
-        }
-
-        Ok(())
-    }
-
-    /// Turns a score back into a metric value.
-    ///
-    /// A code of `top` is saturated, meaning the value was at or above the cap. A code of 0 means
-    /// the value was below the floor or truly zero.
-    pub fn dequantise(&self, code: u8) -> f32 {
-        f32::from(code) / f32::from(self.top) * self.cap
-    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]

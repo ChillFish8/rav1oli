@@ -15,5 +15,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 
+rav1oli-quantise = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }

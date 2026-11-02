@@ -1,12 +1,24 @@
 use anyhow::{Context, bail};
 use rav1oli_bestsource::Frame;
+use rav1oli_quantise::block_scores;
 use rav1oli_table::{FrameScores, MapSummary, Metric, MetricSettings, Quantisation};
 use rav1oli_vship::{Butteraugli, Cvvdp, CvvdpOptions, DistortionMap};
 
 use super::colour::{FrameDescription, PlaneBuffers, check_compatible, colour_space};
 use super::display::SelectedDisplay;
-use super::quantise::block_scores;
 use super::statistics::summarise;
+
+pub const BUTTERAUGLI_QUANTISATION: Quantisation = Quantisation {
+    cap: 8.0,
+    floor: 0.5,
+    top: 255,
+};
+
+pub const CVVDP_QUANTISATION: Quantisation = Quantisation {
+    cap: 1.0,
+    floor: 0.0,
+    top: 255,
+};
 
 /// The Butteraugli norm reported as `norm_q`.
 const BUTTERAUGLI_QNORM: i32 = 2;

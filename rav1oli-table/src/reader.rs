@@ -8,9 +8,10 @@ use arrow_array::types::{Float64Type, UInt32Type};
 use arrow_schema::SchemaRef;
 use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder};
 use parquet::file::metadata::ParquetMetaData;
+use rav1oli_quantise::Quantisation;
 
 use crate::error::TableError;
-use crate::metadata::{FrameScores, METADATA_KEY, MapMetadata, MapSummary, Metric, Quantisation};
+use crate::metadata::{FrameScores, METADATA_KEY, MapMetadata, MapSummary, Metric};
 use crate::schema::map_schema;
 
 /// The number of frames decoded from the file at a time.

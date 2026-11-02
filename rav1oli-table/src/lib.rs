@@ -13,9 +13,10 @@ mod writer;
 #[cfg(test)]
 mod tests;
 
+pub use rav1oli_quantise::{BLOCK_SIZE, InvalidQuantisation, Quantisation};
+
 pub use self::error::TableError;
 pub use self::metadata::{
-    BLOCK_SIZE,
     DisplaySettings,
     EncoderSettings,
     FrameRate,
@@ -24,7 +25,6 @@ pub use self::metadata::{
     MapSummary,
     Metric,
     MetricSettings,
-    Quantisation,
     SettingMismatch,
     SourceInfo,
     Statistics,
