@@ -1,6 +1,16 @@
+mod metadata;
 mod roundtrip;
 
-use crate::metadata::{EncoderSettings, FrameRate, MapMetadata, Metric, MetricSettings, SourceInfo};
+use crate::metadata::{
+    DisplaySettings,
+    EncoderSettings,
+    FrameRate,
+    MapMetadata,
+    Metric,
+    MetricSettings,
+    Quantisation,
+    SourceInfo,
+};
 
 pub(crate) fn sample_metadata() -> MapMetadata {
     let source = SourceInfo {
@@ -18,9 +28,21 @@ pub(crate) fn sample_metadata() -> MapMetadata {
         crf: 30,
         svt_params: None,
     };
+    let display = DisplaySettings {
+        model: "trix_fhd".to_string(),
+        config: None,
+    };
+    let quantisation = Quantisation {
+        cap: 1.0,
+        floor: 0.0,
+        top: 255,
+    };
     let metric = MetricSettings {
         metric: Metric::Cvvdp,
         temporal: true,
+        display: Some(display),
+        intensity_target: None,
+        quantisation,
     };
 
     MapMetadata {

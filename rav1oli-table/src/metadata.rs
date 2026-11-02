@@ -12,7 +12,7 @@ pub(crate) const FORMAT_VERSION: u32 = 1;
 pub(crate) const METADATA_KEY: &str = "rav1oli.map";
 
 /// Describes how a distortion map was produced.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MapMetadata {
     pub source: SourceInfo,
     pub encoder: EncoderSettings,
@@ -42,10 +42,64 @@ pub struct EncoderSettings {
     pub svt_params: Option<String>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricSettings {
     pub metric: Metric,
     pub temporal: bool,
+    pub display: Option<DisplaySettings>,
+    pub intensity_target: Option<f32>,
+    pub quantisation: Quantisation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DisplaySettings {
+    pub model: String,
+    /// The custom display JSON, when the model came from a display config.
+    pub config: Option<String>,
+}
+
+/// Turns a block's metric value into a `u8` score.
+///
+/// Values below `floor` score 0. Other values are clamped between 0 and `cap`, then scaled so `cap`
+/// scores `top`.
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Quantisation {
+    pub cap: f32,
+    pub floor: f32,
+    pub top: u8,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Statistics {
+    pub average: f64,
+    pub standard_deviation: f64,
+    pub median: f64,
+    pub percentile_5: f64,
+    pub percentile_95: f64,
+    pub minimum: f64,
+    pub maximum: f64,
+}
+
+/// The overall result for a whole map, stored with its metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MapSummary {
+    CvvdpTemporal {
+        score: f64,
+    },
+    CvvdpPerFrame(Statistics),
+    Butteraugli {
+        norm_q: Statistics,
+        norm3: Statistics,
+        norm_inf: Statistics,
+    },
+}
+
+/// The metric scores of a single frame.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum FrameScores {
+    Cvvdp { score: f64 },
+    Butteraugli { norm_q: f64, norm3: f64, norm_inf: f64 },
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -133,6 +187,40 @@ impl MapMetadata {
             current.metric.temporal,
         );
 
+        let stored_model = describe_display_model(&self.metric.display);
+        let current_model = describe_display_model(&current.metric.display);
+        push_if_different(&mut mismatches, "display model", stored_model, current_model);
+
+        let stored_config = display_config(&self.metric.display);
+        let current_config = display_config(&current.metric.display);
+        if stored_config != current_config {
+            let both_custom = stored_config.is_some() && current_config.is_some();
+            let current_description = if both_custom {
+                "a different custom"
+            } else {
+                describe_config(current_config)
+            };
+            let mismatch = SettingMismatch {
+                setting: "display config",
+                stored: describe_config(stored_config).to_string(),
+                current: current_description.to_string(),
+            };
+            mismatches.push(mismatch);
+        }
+
+        let stored_target = describe_target(self.metric.intensity_target);
+        let current_target = describe_target(current.metric.intensity_target);
+        push_if_different(&mut mismatches, "intensity target", stored_target, current_target);
+
+        let stored_quantisation = describe_quantisation(&self.metric.quantisation);
+        let current_quantisation = describe_quantisation(&current.metric.quantisation);
+        push_if_different(
+            &mut mismatches,
+            "quantisation",
+            stored_quantisation,
+            current_quantisation,
+        );
+
         Ok(mismatches)
     }
 
@@ -197,6 +285,40 @@ fn describe_params(params: &Option<String>) -> String {
         Some(params) => params.clone(),
         None => "none".to_string(),
     }
+}
+
+fn describe_display_model(display: &Option<DisplaySettings>) -> String {
+    match display {
+        Some(display) => display.model.clone(),
+        None => "none".to_string(),
+    }
+}
+
+fn display_config(display: &Option<DisplaySettings>) -> Option<&str> {
+    let display = display.as_ref()?;
+    display.config.as_deref()
+}
+
+/// Describes a config without printing its JSON.
+fn describe_config(config: Option<&str>) -> &'static str {
+    match config {
+        Some(_) => "custom",
+        None => "none",
+    }
+}
+
+fn describe_target(target: Option<f32>) -> String {
+    match target {
+        Some(target) => target.to_string(),
+        None => "none".to_string(),
+    }
+}
+
+fn describe_quantisation(quantisation: &Quantisation) -> String {
+    format!(
+        "cap {}, floor {}, top {}",
+        quantisation.cap, quantisation.floor, quantisation.top,
+    )
 }
 
 fn push_if_different<T>(mismatches: &mut Vec<SettingMismatch>, setting: &'static str, stored: T, current: T)

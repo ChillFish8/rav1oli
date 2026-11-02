@@ -16,13 +16,18 @@ mod tests;
 pub use self::error::TableError;
 pub use self::metadata::{
     BLOCK_SIZE,
+    DisplaySettings,
     EncoderSettings,
     FrameRate,
+    FrameScores,
     MapMetadata,
+    MapSummary,
     Metric,
     MetricSettings,
+    Quantisation,
     SettingMismatch,
     SourceInfo,
+    Statistics,
     hash_source,
 };
 pub use self::reader::{Frame, MapReader};
