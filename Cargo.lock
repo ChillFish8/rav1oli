@@ -888,6 +888,7 @@ dependencies = [
  "cc",
  "cmake",
  "libc",
+ "rav1oli-bestsource",
  "tempfile",
  "thiserror",
  "tracing",

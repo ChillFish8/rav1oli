@@ -1,44 +1,85 @@
-use crate::cpu_flag::cpu_flag_for;
+use crate::cpu_flag::{SVT_CODEGEN_FLAGS, codegen_options, cpu_flags_for, svt_c_flags};
 
 #[test]
-fn native_on_x86_64_gives_march() {
-    let flag = cpu_flag_for("-Ctarget-cpu=native", "x86_64", false);
-    assert_eq!(flag.as_deref(), Some("-march=native"));
+fn native_on_x86_64_gives_march_and_mtune() {
+    let flags = cpu_flags_for("-Ctarget-cpu=native", "x86_64", false);
+    assert_eq!(flags, ["-march=native", "-mtune=native"]);
 }
 
 #[test]
-fn apple_m1_on_aarch64_gives_mcpu() {
-    let flag = cpu_flag_for("-C\x1ftarget-cpu=apple-m1", "aarch64", false);
-    assert_eq!(flag.as_deref(), Some("-mcpu=apple-m1"));
+fn apple_m1_on_aarch64_gives_only_mcpu() {
+    let flags = cpu_flags_for("-C\x1ftarget-cpu=apple-m1", "aarch64", false);
+    assert_eq!(flags, ["-mcpu=apple-m1"]);
 }
 
 #[test]
-fn clang_cl_passes_the_flag_through_clang() {
-    let flag = cpu_flag_for("--codegen=target-cpu=x86-64-v3", "x86_64", true);
-    assert_eq!(flag.as_deref(), Some("/clang:-march=x86-64-v3"));
+fn clang_cl_passes_the_flags_through_clang() {
+    let flags = cpu_flags_for("--codegen=target-cpu=x86-64-v3", "x86_64", true);
+    assert_eq!(flags, ["/clang:-march=x86-64-v3", "/clang:-mtune=x86-64-v3"]);
 }
 
 #[test]
-fn no_target_cpu_gives_none() {
-    let flag = cpu_flag_for("-Copt-level=3\x1f-C\x1fdebuginfo=0", "x86_64", false);
-    assert_eq!(flag, None);
+fn no_target_cpu_gives_no_flags() {
+    let flags = cpu_flags_for("-Copt-level=3\x1f-C\x1fdebuginfo=0", "x86_64", false);
+    assert!(flags.is_empty(), "{flags:?}");
 }
 
 #[test]
-fn empty_rustflags_give_none() {
-    let flag = cpu_flag_for("", "x86_64", false);
-    assert_eq!(flag, None);
+fn empty_rustflags_give_no_flags() {
+    let flags = cpu_flags_for("", "x86_64", false);
+    assert!(flags.is_empty(), "{flags:?}");
 }
 
 #[test]
 fn the_last_target_cpu_wins() {
     let rustflags = "-Ctarget-cpu=znver4\x1f--codegen\x1ftarget-cpu=x86-64-v2";
-    let flag = cpu_flag_for(rustflags, "x86_64", false);
-    assert_eq!(flag.as_deref(), Some("-march=x86-64-v2"));
+    let flags = cpu_flags_for(rustflags, "x86_64", false);
+    assert_eq!(flags, ["-march=x86-64-v2", "-mtune=x86-64-v2"]);
 }
 
 #[test]
 #[should_panic(expected = "no CPU flag")]
 fn target_cpu_on_an_unsupported_arch_is_an_error() {
-    cpu_flag_for("-Ctarget-cpu=generic-rv64", "riscv64", false);
+    cpu_flags_for("-Ctarget-cpu=generic-rv64", "riscv64", false);
+}
+
+#[test]
+fn codegen_options_cover_every_spelling() {
+    let rustflags = concat!(
+        "-Copt-level=3\x1f-C\x1fdebuginfo=0\x1f",
+        "--codegen=lto\x1f--codegen\x1fpanic=abort\x1f-Dwarnings",
+    );
+    let options = codegen_options(rustflags);
+    assert_eq!(options, ["opt-level=3", "debuginfo=0", "lto", "panic=abort"]);
+}
+
+#[test]
+fn svt_c_flags_put_the_codegen_flags_before_the_cpu_flags() {
+    let cpu_flags = ["-march=znver4".to_string(), "-mtune=znver4".to_string()];
+    let flags = svt_c_flags(&cpu_flags, false);
+
+    let expected = [
+        "-fno-math-errno",
+        "-fomit-frame-pointer",
+        "-fno-semantic-interposition",
+        "-fno-stack-protector",
+        "-fno-stack-clash-protection",
+        "-U_FORTIFY_SOURCE",
+        "-march=znver4",
+        "-mtune=znver4",
+    ];
+    assert_eq!(flags, expected);
+}
+
+#[test]
+fn svt_c_flags_without_a_target_cpu_are_the_codegen_flags() {
+    let flags = svt_c_flags(&[], false);
+    assert_eq!(flags, SVT_CODEGEN_FLAGS);
+}
+
+#[test]
+fn clang_cl_takes_only_the_cpu_flags() {
+    let cpu_flags = ["/clang:-march=x86-64-v3".to_string()];
+    let flags = svt_c_flags(&cpu_flags, true);
+    assert_eq!(flags, cpu_flags);
 }

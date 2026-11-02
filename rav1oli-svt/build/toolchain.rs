@@ -85,7 +85,7 @@ pub fn require_llvm_tool(name: &str, clang: &Path) -> PathBuf {
         let clang_directory = clang.parent().unwrap_or(Path::new(""));
         let shown_directory = clang_directory.display();
         panic!(
-            "building SVT-AV1 with LTO needs `{name}` or `{suffixed_name}`, \
+            "building SVT-AV1 with LTO or PGO needs `{name}` or `{suffixed_name}`, \
              which is not in {shown_directory} or on PATH"
         );
     }

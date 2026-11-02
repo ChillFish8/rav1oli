@@ -1,26 +1,63 @@
-/// The C flag for the last `-C target-cpu` in cargo's encoded rustflags.
-///
-/// x86_64 takes `-march` and aarch64 takes `-mcpu`. clang-cl gets the flag through `/clang:`.
-pub fn cpu_flag_for(rustflags: &str, target_arch: &str, is_clang_cl: bool) -> Option<String> {
-    let cpu = last_target_cpu(rustflags)?;
+/// The codegen flags every clang compile of SVT takes.
+pub const SVT_CODEGEN_FLAGS: [&str; 6] = [
+    "-fno-math-errno",
+    "-fomit-frame-pointer",
+    "-fno-semantic-interposition",
+    "-fno-stack-protector",
+    "-fno-stack-clash-protection",
+    "-U_FORTIFY_SOURCE",
+];
 
-    let flag_name = match target_arch {
-        "x86_64" => "-march",
-        "aarch64" => "-mcpu",
+/// The C flags for the last `-C target-cpu` in cargo's encoded rustflags.
+///
+/// x86_64 takes `-march` and `-mtune`, while aarch64 takes `-mcpu`, which also tunes. clang-cl gets each
+/// flag through `/clang:`.
+pub fn cpu_flags_for(rustflags: &str, target_arch: &str, is_clang_cl: bool) -> Vec<String> {
+    let Some(cpu) = last_target_cpu(rustflags) else {
+        return Vec::new();
+    };
+
+    let flags = match target_arch {
+        "x86_64" => vec![format!("-march={cpu}"), format!("-mtune={cpu}")],
+        "aarch64" => vec![format!("-mcpu={cpu}")],
         other => panic!("SVT-AV1 has no CPU flag for `-C target-cpu={cpu}` on {other}"),
     };
 
-    let flag = format!("{flag_name}={cpu}");
-    if is_clang_cl {
-        return Some(format!("/clang:{flag}"));
+    if !is_clang_cl {
+        return flags;
     }
 
-    Some(flag)
+    flags.iter().map(|flag| format!("/clang:{flag}")).collect()
+}
+
+/// The flags SVT's C compiles add to their base flags, the codegen flags then `cpu_flags`.
+///
+/// clang-cl takes only the CPU flags.
+pub fn svt_c_flags(cpu_flags: &[String], is_clang_cl: bool) -> Vec<String> {
+    let mut flags = Vec::new();
+
+    if !is_clang_cl {
+        let codegen_flags = SVT_CODEGEN_FLAGS.iter().map(|flag| flag.to_string());
+        flags.extend(codegen_flags);
+    }
+
+    flags.extend_from_slice(cpu_flags);
+    flags
 }
 
 /// The value of the last `-C target-cpu`, in any of the spellings rustc accepts.
 fn last_target_cpu(rustflags: &str) -> Option<&str> {
-    let mut target_cpu = None;
+    let options = codegen_options(rustflags);
+
+    options
+        .iter()
+        .rev()
+        .find_map(|option| option.strip_prefix("target-cpu="))
+}
+
+/// The value of every `-C` option in cargo's encoded rustflags, in any of the spellings rustc accepts.
+pub fn codegen_options(rustflags: &str) -> Vec<&str> {
+    let mut options = Vec::new();
     let mut is_codegen_value = false;
 
     for flag in rustflags.split('\x1f') {
@@ -36,11 +73,10 @@ fn last_target_cpu(rustflags: &str) -> Option<&str> {
             flag.strip_prefix("-C")
         };
 
-        let cpu = codegen_option.and_then(|option| option.strip_prefix("target-cpu="));
-        if cpu.is_some() {
-            target_cpu = cpu;
+        if let Some(option) = codegen_option {
+            options.push(option);
         }
     }
 
-    target_cpu
+    options
 }

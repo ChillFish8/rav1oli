@@ -4,7 +4,7 @@ use std::mem::{self, MaybeUninit};
 use std::path::{Path, PathBuf};
 use std::{ptr, slice};
 
-use crate::error::{EncodeError, GridError};
+use crate::error::{EncodeError, GridError, ParamError};
 use crate::grids::DistortionGrids;
 use crate::ivf::IvfWriter;
 use crate::params::{self, DefaultConfig, SVT_SUCCESS};
@@ -35,6 +35,16 @@ pub struct ColourDescription {
     pub chroma_position: ChromaPosition,
 }
 
+/// The highest SIMD level SVT-AV1 may pick.
+#[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
+pub enum CpuCap {
+    /// SVT-AV1's own choice for the host.
+    #[default]
+    Default,
+    /// At most AVX2, which only an x86_64 build has.
+    Avx2,
+}
+
 /// The settings an [Encoder] is created with.
 ///
 /// `svt_args` are extra SVT-AV1 flags in `SvtAv1EncApp` style, such as `["--tune", "0"]`.
@@ -49,6 +59,14 @@ pub struct EncoderSettings {
     pub preset: i8,
     pub crf: u8,
     pub svt_args: Vec<String>,
+    pub cpu_cap: CpuCap,
+}
+
+impl EncoderSettings {
+    /// Caps the SIMD level SVT-AV1 picks, for profiling kernels the host would not pick by default.
+    pub fn with_cpu_cap(self, cap: CpuCap) -> Self {
+        Self { cpu_cap: cap, ..self }
+    }
 }
 
 /// The Y, U and V planes of one 4:2:0 frame.
@@ -92,6 +110,9 @@ pub struct Encoder {
 impl Encoder {
     /// Sets SVT-AV1 up from `settings` and creates the IVF file at `output`.
     pub fn new(settings: &EncoderSettings, output: &Path) -> Result<Self, EncodeError> {
+        #[cfg(svt_pgo_generate)]
+        crate::profiling::keep_profile_runtime();
+
         if settings.bit_depth != 8 && settings.bit_depth != 10 {
             let reason = format!(
                 "a bit depth of {} is not supported, only 8 or 10",
@@ -546,7 +567,7 @@ fn io_format(planes: [&[u16]; 3], strides: [usize; 3]) -> Result<sys::EbSvtIOFor
     })
 }
 
-/// Sets the size, frame rate, bit depth, colour, preset and CRF, and turns the distortion map on.
+/// Sets the size, frame rate, bit depth, colour, preset, CRF and CPU cap, and turns the distortion map on.
 fn apply_settings(
     config: &mut sys::EbSvtAv1EncConfiguration,
     settings: &EncoderSettings,
@@ -565,6 +586,23 @@ fn apply_settings(
 
     let crf = settings.crf.to_string();
     params::parse_one(config, "crf", &crf)?;
+
+    if settings.cpu_cap == CpuCap::Avx2 {
+        apply_avx2_cap(config)?;
+    }
+
+    Ok(())
+}
+
+/// Caps SVT at AVX2 through `asm`, which `svt_args` cannot set as the encoder owns it.
+fn apply_avx2_cap(config: &mut sys::EbSvtAv1EncConfiguration) -> Result<(), EncodeError> {
+    if !cfg!(target_arch = "x86_64") {
+        let reason = "the AVX2 CPU cap needs an x86_64 build of SVT-AV1";
+        let error = ParamError::Requirement { reason };
+        return Err(error.into());
+    }
+
+    params::parse_one(config, "asm", "avx2")?;
 
     Ok(())
 }

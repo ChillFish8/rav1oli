@@ -36,13 +36,13 @@ pub fn is_crt_static() -> bool {
     target_features.split(',').any(|feature| feature == "crt-static")
 }
 
-/// The C flag for the user's `-C target-cpu`, or `None` when they set none.
-pub fn target_cpu_flag() -> Option<String> {
+/// The C flags for the user's `-C target-cpu`, empty when they set none.
+pub fn target_cpu_flags() -> Vec<String> {
     let rustflags = env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
     let target_arch = target_arch();
     let is_clang_cl = is_msvc_target();
 
-    cpu::cpu_flag_for(&rustflags, &target_arch, is_clang_cl)
+    cpu::cpu_flags_for(&rustflags, &target_arch, is_clang_cl)
 }
 
 /// The file name of a static library as the target's linker looks it up.

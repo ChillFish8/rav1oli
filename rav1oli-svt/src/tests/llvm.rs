@@ -61,7 +61,7 @@ fn gnu_base_flags() -> Vec<String> {
 #[test]
 fn merged_flags_keep_the_target_and_sections() {
     let base_flags = gnu_base_flags();
-    let flags = merged_compile_flags(&base_flags, None, false);
+    let flags = merged_compile_flags(&base_flags, &[], false);
 
     let expected = [
         "-ffunction-sections",
@@ -75,12 +75,13 @@ fn merged_flags_keep_the_target_and_sections() {
 }
 
 #[test]
-fn merged_flags_end_with_the_cpu_flag() {
+fn merged_flags_end_with_the_svt_c_flags() {
     let base_flags = gnu_base_flags();
-    let flags = merged_compile_flags(&base_flags, Some("-mcpu=neoverse-v2"), false);
+    let svt_c_flags = ["-fno-math-errno".to_string(), "-mcpu=neoverse-v2".to_string()];
+    let flags = merged_compile_flags(&base_flags, &svt_c_flags, false);
 
-    let last_flags = &flags[flags.len() - 2..];
-    assert_eq!(last_flags, ["-O3", "-mcpu=neoverse-v2"]);
+    let last_flags = &flags[flags.len() - 3..];
+    assert_eq!(last_flags, ["-O3", "-fno-math-errno", "-mcpu=neoverse-v2"]);
 }
 
 #[test]
@@ -95,7 +96,7 @@ fn merged_flags_for_clang_cl_drop_its_optimisation_and_profile_flags() {
     .iter()
     .map(|flag| flag.to_string())
     .collect();
-    let flags = merged_compile_flags(&base_flags, None, true);
+    let flags = merged_compile_flags(&base_flags, &[], true);
 
     assert_eq!(flags, ["-nologo", "-MD", "-Brepro", "/clang:-O3"]);
 }

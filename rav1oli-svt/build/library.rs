@@ -10,11 +10,24 @@ pub const SVT_SOURCE: &str = "vendor/svt-av1";
 pub struct SvtBuild<'a> {
     pub clang: &'a Path,
     pub nasm: Option<&'a Path>,
-    pub cpu_flag: Option<&'a str>,
+    /// The codegen and CPU flags from [svt_c_flags](crate::cpu::svt_c_flags).
+    pub c_flags: &'a [String],
     pub is_x86_64: bool,
     pub is_msvc: bool,
     pub is_lto: bool,
+    pub profile_flags: &'a [String],
+    /// Whether SVT's warnings stay on, so the profile errors in `profile_flags` can fire.
+    pub keeps_warnings: bool,
 }
+
+/// Drops the flag the cmake crate adds to silence warnings, which also silences warnings made errors.
+const KEEP_WARNINGS_SCRIPT: &str = r#"foreach(flags_variable CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+    string(REGEX REPLACE "(^| )-(w|W0)( |$)" " " ${flags_variable} "${${flags_variable}}")
+endforeach()
+"#;
+
+/// The project include for builds that keep the cmake crate's flags as they are.
+const NO_CHANGE_SCRIPT: &str = "# The flags are left as the cmake crate set them.\n";
 
 /// Configures, builds and installs the static SVT library, returning the install dir.
 pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
@@ -52,13 +65,28 @@ pub fn build_svt(svt_build: &SvtBuild) -> PathBuf {
         config.define("ENABLE_AVX512", "ON");
     }
 
-    if let Some(cpu_flag) = svt_build.cpu_flag {
-        config.cflag(cpu_flag).cxxflag(cpu_flag);
+    for flag in svt_build.c_flags {
+        config.cflag(flag).cxxflag(flag);
     }
 
     if svt_build.is_lto {
         config.cflag("-flto").cxxflag("-flto");
     }
+
+    for flag in svt_build.profile_flags {
+        config.cflag(flag).cxxflag(flag);
+    }
+
+    // CMake runs the script straight after SVT's `project()`, before any target reads the flags. It is
+    // always set, as CMake would otherwise keep a profile-use build's script in its cache.
+    let project_script = if svt_build.keeps_warnings {
+        KEEP_WARNINGS_SCRIPT
+    } else {
+        NO_CHANGE_SCRIPT
+    };
+    let script_path = out_dir.join("project-include.cmake");
+    write_text(&script_path, project_script);
+    config.define("CMAKE_PROJECT_INCLUDE", &script_path);
 
     // The Visual Studio generator ignores `CMAKE_C_COMPILER`, so clang-cl needs Ninja.
     if svt_build.is_msvc {

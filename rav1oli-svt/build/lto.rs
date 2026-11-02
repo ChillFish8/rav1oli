@@ -28,7 +28,7 @@ impl LtoTools {
 pub struct LtoBuild<'a> {
     pub tools: &'a LtoTools,
     pub clang: &'a Path,
-    pub cpu_flag: Option<&'a str>,
+    pub c_flags: &'a [String],
     pub is_msvc: bool,
 }
 
@@ -96,7 +96,7 @@ fn merged_compile_command(lto_build: &LtoBuild, input: &str, output: &str) -> Co
         .iter()
         .map(|flag| flag.to_string_lossy().into_owned())
         .collect();
-    let flags = llvm::merged_compile_flags(&base_flags, lto_build.cpu_flag, lto_build.is_msvc);
+    let flags = llvm::merged_compile_flags(&base_flags, lto_build.c_flags, lto_build.is_msvc);
 
     let compile_flag = if lto_build.is_msvc { "/c" } else { "-c" };
     let mut command = Command::new(lto_build.clang);

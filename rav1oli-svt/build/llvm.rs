@@ -20,8 +20,8 @@ pub fn is_bitcode(header: &[u8]) -> bool {
 
 /// The flags that compile merged bitcode, built from the C compile's base flags.
 ///
-/// Optimisation, LTO and profile flags are dropped, then `-O3` and the CPU flag are added.
-pub fn merged_compile_flags(base_flags: &[String], cpu_flag: Option<&str>, is_msvc: bool) -> Vec<String> {
+/// Optimisation, LTO and profile flags are dropped, then `-O3` and the SVT C flags are added.
+pub fn merged_compile_flags(base_flags: &[String], svt_c_flags: &[String], is_msvc: bool) -> Vec<String> {
     let mut flags: Vec<String> = base_flags
         .iter()
         .filter(|flag| is_kept_flag(flag))
@@ -31,10 +31,7 @@ pub fn merged_compile_flags(base_flags: &[String], cpu_flag: Option<&str>, is_ms
     let optimisation = if is_msvc { "/clang:-O3" } else { "-O3" };
     flags.push(optimisation.to_string());
 
-    if let Some(cpu_flag) = cpu_flag {
-        flags.push(cpu_flag.to_string());
-    }
-
+    flags.extend_from_slice(svt_c_flags);
     flags
 }
 

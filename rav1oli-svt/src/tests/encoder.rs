@@ -6,6 +6,7 @@ use crate::encoder::widen_plane;
 use crate::{
     ChromaPosition,
     ColourDescription,
+    CpuCap,
     DistortionGrids,
     EncodeError,
     Encoder,
@@ -39,6 +40,7 @@ pub(super) fn settings(bit_depth: u8, svt_args: &[&str]) -> EncoderSettings {
         preset: 12,
         crf: 40,
         svt_args,
+        cpu_cap: CpuCap::Default,
     }
 }
 
@@ -396,4 +398,45 @@ fn odd_dimensions_with_grids_encode() {
     let file = read_ivf(&bytes);
     assert_eq!((file.width, file.height), (135, 71));
     assert_eq!(file.frames.len() as u64, FRAMES);
+}
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn an_avx2_cap_encodes() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("avx2.ivf");
+    let capped = settings(8, &[]).with_cpu_cap(CpuCap::Avx2);
+    let mut encoder = Encoder::new(&capped, &path).unwrap();
+
+    for frame in 0..FRAMES {
+        let grids = mixed_grids(frame);
+        encode_eight_bit(&mut encoder, frame, Some(&grids));
+    }
+
+    encoder.finish().unwrap();
+    check_output(&path);
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+#[test]
+fn an_avx2_cap_is_an_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("avx2.ivf");
+    let capped = settings(8, &[]).with_cpu_cap(CpuCap::Avx2);
+
+    let error = Encoder::new(&capped, &path).unwrap_err();
+    let is_requirement = matches!(error, EncodeError::Param(ParamError::Requirement { .. }));
+    assert!(is_requirement, "{error:?}");
+}
+
+#[test]
+fn asm_cannot_be_passed_as_an_svt_flag() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("asm.ivf");
+
+    let asm_settings = settings(8, &["--asm", "avx2"]);
+
+    let error = Encoder::new(&asm_settings, &path).unwrap_err();
+    let is_encoder_owned = matches!(error, EncodeError::Param(ParamError::EncoderOwned { .. }));
+    assert!(is_encoder_owned, "{error:?}");
 }

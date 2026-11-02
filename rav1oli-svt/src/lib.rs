@@ -17,13 +17,26 @@ mod ivf;
 mod llvm;
 mod logging;
 mod params;
+#[cfg(test)]
+#[path = "../build/pgo.rs"]
+mod pgo;
+#[cfg(svt_pgo_generate)]
+mod profiling;
 mod sys;
 #[cfg(test)]
 mod tests;
 
 use std::ffi::CStr;
 
-pub use self::encoder::{ChromaPosition, ColourDescription, EncodeSummary, Encoder, EncoderSettings, Planes};
+pub use self::encoder::{
+    ChromaPosition,
+    ColourDescription,
+    CpuCap,
+    EncodeSummary,
+    Encoder,
+    EncoderSettings,
+    Planes,
+};
 pub use self::error::{EncodeError, GridError, GridKind, ParamError};
 pub use self::grids::{DistortionGrids, MAX_CUT, MAX_DROP};
 pub use self::params::{check_params, is_encoder_owned, param_names};

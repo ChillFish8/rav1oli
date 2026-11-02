@@ -1,16 +1,30 @@
 # The vcpkg triplet `static-deps` installs for. Override on Intel macOS.
 vcpkg_triplet := env("RAV1OLI_VCPKG_TRIPLET", if os() == "macos" { "arm64-osx-release" } else { "x64-linux-release" })
 
+# Cargo runs build scripts from the crate dir, so a relative SVT-AV1 profile path is made absolute first.
+svt_profile := env("RAV1OLI_SVT_PGO_PROFILE", "")
+svt_profile_path := if svt_profile == "" { "" } else { absolute_path(svt_profile) }
+svt_profile_assignment := "RAV1OLI_SVT_PGO_PROFILE=" + quote(svt_profile_path) + " "
+svt_profile_env := if svt_profile == "" { "" } else { svt_profile_assignment }
+
+# The clip `pgo-svt` trains on.
+pgo_clip := env("RAV1OLI_PGO_CLIP", "")
+
 format:
     cargo +nightly fmt --all
 
 # Builds the workspace, fetching submodules and static deps when missing.
 #
 # Takes `--static`, `--release`, and `--vulkan` or `--cuda` for the static Vship backend, Vulkan by default.
-# `--release` also builds SVT-AV1 with LTO, which needs `llvm-link` and `llvm-ar` from clang's LLVM version.
+# `--release` also builds SVT-AV1 with LTO and PGO, which need `llvm-link`, `llvm-ar` and `llvm-profdata` from
+# clang's LLVM version. It uses the profile in `RAV1OLI_SVT_PGO_PROFILE`, or trains one with `pgo-svt` first.
 build *FLAGS:
     #!/usr/bin/env bash
     set -euo pipefail
+    if [ -n "${RAV1OLI_SVT_PGO_PROFILE:-}" ]; then
+        export RAV1OLI_SVT_PGO_PROFILE={{ quote(svt_profile_path) }}
+    fi
+
     is_static=false
     profile_flag=""
     features=""
@@ -42,6 +56,11 @@ build *FLAGS:
         just submodules
     fi
 
+    if [ -n "$profile_flag" ] && [ -z "${RAV1OLI_SVT_PGO_PROFILE:-}" ]; then
+        just pgo-svt
+        export RAV1OLI_SVT_PGO_PROFILE="$PWD/target/pgo/svt.profdata"
+    fi
+
     if [ "$is_static" = false ]; then
         cargo build --workspace $profile_flag --features "$features"
         exit 0
@@ -59,14 +78,107 @@ build *FLAGS:
     cargo build --workspace $profile_flag --features "$features"
 
 clippy *ARGS:
-    cargo clippy {{ARGS}}
+    {{ svt_profile_env }}cargo clippy {{ARGS}}
 
 run *ARGS:
-    cargo run --release -- {{ARGS}}
+    {{ svt_profile_env }}cargo run --release -- {{ARGS}}
 
 # Runs benchmarks, passing any extra arguments through.
 bench *ARGS:
-    cargo bench {{ARGS}}
+    {{ svt_profile_env }}cargo bench {{ARGS}}
+
+# Trains an SVT-AV1 PGO profile into `target/pgo/svt.profdata` from distortion map encodes.
+#
+# The clip comes from `RAV1OLI_PGO_CLIP`. The instrumented build uses the release profile, LTO and the
+# caller's RUSTFLAGS, so the profile matches the release build that uses it. It trains at presets 4 and 8.
+# x86_64 hosts with AVX2 run both again capped at AVX2, so those kernels are profiled too.
+pgo-svt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ if pgo_clip == "" { error("set RAV1OLI_PGO_CLIP to the training clip") } else { "" } }}
+
+    clang="${CC:-clang}"
+    if ! clang_path="$(command -v "$clang")"; then
+        echo "$clang not found, but training needs it to find a matching llvm-profdata" >&2
+        exit 1
+    fi
+
+    clang_major="$("$clang" --version | sed -n 's/.*version \([0-9][0-9]*\).*/\1/p' | head -n 1)"
+    clang_dir="$(dirname "$clang_path")"
+    llvm_profdata=""
+    for candidate in "$clang_dir/llvm-profdata" llvm-profdata \
+        "$clang_dir/llvm-profdata-$clang_major" "llvm-profdata-$clang_major"; do
+        if ! command -v "$candidate" > /dev/null; then
+            continue
+        fi
+
+        version_text="$("$candidate" --version)"
+        major="$(echo "$version_text" | sed -n 's/.*version \([0-9][0-9]*\).*/\1/p' | head -n 1)"
+        if [ "$major" = "$clang_major" ]; then
+            llvm_profdata="$candidate"
+            break
+        fi
+    done
+
+    if [ -z "$llvm_profdata" ]; then
+        echo "no llvm-profdata shares the LLVM major version of $clang_path, which is $clang_major" >&2
+        exit 1
+    fi
+
+    pgo_dir="$PWD/target/pgo"
+    raw_dir="$pgo_dir/raw"
+    profile="$pgo_dir/svt.profdata"
+    rm -rf "$raw_dir"
+    mkdir -p "$raw_dir"
+
+    unset RAV1OLI_SVT_PGO_PROFILE
+    export RAV1OLI_SVT_PGO_GENERATE="$raw_dir"
+    export RAV1OLI_PGO_OUTPUT="$pgo_dir/train.ivf"
+    features="rav1oli-svt/lto,rav1oli-svt/pgo-train"
+    cargo build --release -p rav1oli-svt --example pgo-train --features "$features"
+    train=(cargo run --release -p rav1oli-svt --example pgo-train --features "$features")
+
+    has_avx2=false
+    if [ "{{ arch() }}" != "x86_64" ]; then
+        echo "skipping the AVX2-capped runs, as AVX2 kernels only exist on x86_64"
+    elif ! rustc --print cfg -C target-cpu=native | grep -q 'target_feature="avx2"'; then
+        echo "skipping the AVX2-capped runs, as this host has no AVX2"
+    else
+        has_avx2=true
+    fi
+
+    # Preset 4 profiles the slow paths and preset 8 the fast ones. Each run writes its own raw profile.
+    for preset in 4 8; do
+        export RAV1OLI_PGO_PRESET="$preset"
+        export LLVM_PROFILE_FILE="$raw_dir/preset-$preset-%p.profraw"
+        "${train[@]}"
+
+        if [ "$has_avx2" = true ]; then
+            export LLVM_PROFILE_FILE="$raw_dir/preset-$preset-avx2-%p.profraw"
+            RAV1OLI_PGO_CAP_AVX2=1 "${train[@]}"
+        fi
+    done
+
+    shopt -s nullglob
+    raw_profiles=("$raw_dir"/*.profraw)
+    if [ "${#raw_profiles[@]}" -eq 0 ]; then
+        echo "the training runs wrote no raw profiles into $raw_dir" >&2
+        exit 1
+    fi
+
+    "$llvm_profdata" merge -o "$profile" "${raw_profiles[@]}"
+
+    summary="$("$llvm_profdata" show "$profile")"
+    total_functions="$(echo "$summary" | sed -n 's/^Total functions: //p')"
+    maximum_count="$(echo "$summary" | sed -n 's/^Maximum function count: //p')"
+    echo "the profile covers ${total_functions:-no} functions, with a top count of ${maximum_count:-0}"
+    if [ "${total_functions:-0}" -le 1000 ] || [ "${maximum_count:-0}" -le 0 ]; then
+        echo "the profile needs more than 1000 functions and a maximum function count above 0" >&2
+        exit 1
+    fi
+
+    echo "SVT-AV1 profile written to $profile"
+    echo "Pass it to a build with RAV1OLI_SVT_PGO_PROFILE=$profile"
 
 # Fetches the vendored Vship, BestSource and libp2p sources at their pinned commits.
 submodules:
@@ -74,7 +186,7 @@ submodules:
 
 # Runs tests with nextest, passing any extra arguments through.
 test *ARGS:
-    cargo nextest run {{ARGS}}
+    {{ svt_profile_env }}cargo nextest run {{ARGS}}
 
 # Tests the NEON block scores.
 #
