@@ -1,4 +1,4 @@
-use crate::quantisation::{BLOCK_SIZE, Quantisation};
+use crate::quantisation::{BLOCK_SIZE, Quantisation, Scaler};
 
 /// Reduces a packed `width * height` metric map to one code per block.
 ///
@@ -108,16 +108,14 @@ pub(crate) fn scalar_block_scores(
         }
     }
 
-    let factor = quantisation.factor();
+    let scaler = quantisation.scaler();
     maximums
         .into_iter()
-        .map(|maximum| quantisation.quantise_with_factor(maximum, factor))
+        .map(|maximum| scaler.quantise(maximum))
         .collect()
 }
 
 /// Returns the code for one block, using only the pixels that exist.
-///
-/// `factor` comes from [Quantisation::factor](crate::quantisation::Quantisation::factor).
 #[cfg_attr(
     all(not(test), not(any(target_arch = "x86_64", target_arch = "aarch64"))),
     expect(dead_code, reason = "only the tests call it on this architecture")
@@ -128,8 +126,7 @@ pub(crate) fn scalar_block(
     height: usize,
     block_column: usize,
     block_row: usize,
-    quantisation: &Quantisation,
-    factor: f32,
+    scaler: &Scaler,
 ) -> u8 {
     let block_size = BLOCK_SIZE as usize;
     let start_column = block_column * block_size;
@@ -146,5 +143,5 @@ pub(crate) fn scalar_block(
         maximum = maximum.max(row_maximum);
     }
 
-    quantisation.quantise_with_factor(maximum, factor)
+    scaler.quantise(maximum)
 }

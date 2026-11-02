@@ -61,11 +61,11 @@ fn scalar_block_matches_the_full_scalar_run() {
     values[8 * 10 + 9] = 8.0;
 
     let full = scalar_block_scores(&values, 10, 9, &BUTTERAUGLI);
-    let factor = BUTTERAUGLI.factor();
+    let scaler = BUTTERAUGLI.scaler();
 
     for block_row in 0..2 {
         for block_column in 0..2 {
-            let code = scalar_block(&values, 10, 9, block_column, block_row, &BUTTERAUGLI, factor);
+            let code = scalar_block(&values, 10, 9, block_column, block_row, &scaler);
             assert_eq!(code, full[block_row * 2 + block_column]);
         }
     }

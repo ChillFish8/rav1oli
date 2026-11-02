@@ -477,8 +477,13 @@ fn creating_a_map_with_an_unusable_quantisation_is_an_error() {
         ..usable
     };
     let zero_top = Quantisation { top: 0, ..usable };
+    let overflowing_factor = Quantisation {
+        cap: f32::MIN_POSITIVE,
+        floor: 0.0,
+        top: 255,
+    };
 
-    for quantisation in [zero_cap, nan_cap, floor_at_cap, zero_top] {
+    for quantisation in [zero_cap, nan_cap, floor_at_cap, zero_top, overflowing_factor] {
         let mut metadata = sample_metadata();
         metadata.quantisation = quantisation;
 

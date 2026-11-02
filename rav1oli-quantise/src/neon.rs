@@ -33,11 +33,11 @@ pub(crate) unsafe fn block_scores(
     debug_assert_eq!(values.len(), width * height);
     debug_assert_eq!(blocks.len(), blocks_wide * blocks_high);
 
-    let factor = quantisation.factor();
+    let scaler = quantisation.scaler();
     let scale = Scale {
-        floor: vdupq_n_f32(quantisation.floor),
-        cap: vdupq_n_f32(quantisation.cap),
-        factor: vdupq_n_f32(factor),
+        floor: vdupq_n_f32(scaler.floor),
+        cap: vdupq_n_f32(scaler.cap),
+        factor: vdupq_n_f32(scaler.factor),
     };
     let full_bands = height / block_size;
     let tiles = width / TILE_WIDTH;
@@ -59,15 +59,7 @@ pub(crate) unsafe fn block_scores(
         }
 
         for block_column in first_scalar_block..blocks_wide {
-            let code = scalar_block(
-                values,
-                width,
-                height,
-                block_column,
-                block_row,
-                quantisation,
-                factor,
-            );
+            let code = scalar_block(values, width, height, block_column, block_row, &scaler);
             blocks[block_row * blocks_wide + block_column] = code;
         }
     }
@@ -117,7 +109,8 @@ fn tile_codes(
     let both_codes = vget_lane_u16::<0>(pairs);
 
     let destination = codes.as_mut_ptr().cast::<u16>();
-    // SAFETY: `codes` was just checked to hold 2 bytes, and the write does not need alignment.
+    // SAFETY: `codes` holds 2 bytes, checked by the `assert_eq!` at the top of this function, and
+    // the write does not need alignment.
     unsafe { destination.write_unaligned(both_codes) };
 }
 
@@ -149,7 +142,7 @@ fn row_codes(pixels: &[f32], scale: &Scale) -> uint8x16_t {
 fn quantise_four(pixels: &[f32], scale: &Scale) -> uint32x4_t {
     assert_eq!(pixels.len(), 4);
 
-    // SAFETY: `pixels` was just checked to hold 4 floats.
+    // SAFETY: `pixels` holds 4 floats, checked by the `assert_eq!` at the top of this function.
     let value = unsafe { vld1q_f32(pixels.as_ptr()) };
 
     // The compare is false for NaN, so NaN scores 0.

@@ -33,11 +33,11 @@ pub(crate) unsafe fn block_scores(
     debug_assert_eq!(values.len(), width * height);
     debug_assert_eq!(blocks.len(), blocks_wide * blocks_high);
 
-    let factor = quantisation.factor();
+    let scaler = quantisation.scaler();
     let scale = Scale {
-        floor: _mm512_set1_ps(quantisation.floor),
-        cap: _mm512_set1_ps(quantisation.cap),
-        factor: _mm512_set1_ps(factor),
+        floor: _mm512_set1_ps(scaler.floor),
+        cap: _mm512_set1_ps(scaler.cap),
+        factor: _mm512_set1_ps(scaler.factor),
         half: _mm512_set1_ps(0.5),
         one: _mm512_set1_epi32(1),
     };
@@ -61,15 +61,7 @@ pub(crate) unsafe fn block_scores(
         }
 
         for block_column in first_scalar_block..blocks_wide {
-            let code = scalar_block(
-                values,
-                width,
-                height,
-                block_column,
-                block_row,
-                quantisation,
-                factor,
-            );
+            let code = scalar_block(values, width, height, block_column, block_row, &scaler);
             blocks[block_row * blocks_wide + block_column] = code;
         }
     }
@@ -110,7 +102,8 @@ fn tile_codes(
     let narrowed = _mm512_cvtepi64_epi8(reduced);
 
     let destination = codes.as_mut_ptr().cast::<__m128i>();
-    // SAFETY: `codes` was just checked to hold 8 bytes, and the store writes 8 bytes unaligned.
+    // SAFETY: `codes` holds 8 bytes, checked by the `assert_eq!` at the top of this function, and
+    // the store writes 8 bytes unaligned.
     unsafe { _mm_storel_epi64(destination, narrowed) };
 }
 
@@ -144,7 +137,8 @@ fn row_codes(pixels: &[f32], scale: &Scale) -> __m512i {
 fn quantise_sixteen(pixels: &[f32], scale: &Scale) -> __m128i {
     assert_eq!(pixels.len(), 16);
 
-    // SAFETY: `pixels` was just checked to hold 16 floats and the load is unaligned.
+    // SAFETY: `pixels` holds 16 floats, checked by the `assert_eq!` at the top of this function, and
+    // the load is unaligned.
     let value = unsafe { _mm512_loadu_ps(pixels.as_ptr()) };
 
     let at_or_above_floor = _mm512_cmp_ps_mask::<_CMP_GE_OQ>(value, scale.floor);

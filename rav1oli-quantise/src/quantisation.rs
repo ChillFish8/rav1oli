@@ -35,6 +35,10 @@ impl Quantisation {
             return Err(InvalidQuantisation("top must be above 0"));
         }
 
+        if !self.scaler().factor.is_finite() {
+            return Err(InvalidQuantisation("cap is too small for top"));
+        }
+
         Ok(())
     }
 
@@ -43,8 +47,8 @@ impl Quantisation {
     /// Values below the floor, negative values and NaN score 0. Everything else is clamped to the
     /// cap and scaled so the cap scores the top code.
     pub fn quantise(&self, value: f32) -> u8 {
-        let factor = self.factor();
-        self.quantise_with_factor(value, factor)
+        let scaler = self.scaler();
+        scaler.quantise(value)
     }
 
     /// Turns a score back into a metric value.
@@ -56,19 +60,33 @@ impl Quantisation {
         f32::from(code) * factor
     }
 
-    /// The amount a clamped value is multiplied by to give its code.
-    pub(crate) fn factor(&self) -> f32 {
-        f32::from(self.top) / self.cap
+    /// Prepares the scale for quantising many values.
+    pub(crate) fn scaler(&self) -> Scaler {
+        Scaler {
+            floor: self.floor,
+            cap: self.cap,
+            factor: f32::from(self.top) / self.cap,
+        }
     }
+}
 
-    /// Converts a metric value into a score code using a factor from [Quantisation::factor].
-    pub(crate) fn quantise_with_factor(&self, value: f32, factor: f32) -> u8 {
+/// A [Quantisation](crate::quantisation::Quantisation) with its multiplier worked out once.
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct Scaler {
+    pub(crate) floor: f32,
+    pub(crate) cap: f32,
+    /// The amount a clamped value is multiplied by to give its code.
+    pub(crate) factor: f32,
+}
+
+impl Scaler {
+    pub(crate) fn quantise(&self, value: f32) -> u8 {
         if value.is_nan() || value < self.floor {
             return 0;
         }
 
         let clamped = value.clamp(0.0, self.cap);
-        let scaled = clamped * factor;
+        let scaled = clamped * self.factor;
         scaled.round() as u8
     }
 }

@@ -1,4 +1,5 @@
 use super::{BUTTERAUGLI, CVVDP};
+use crate::Quantisation;
 
 #[test]
 fn values_below_the_floor_score_zero() {
@@ -38,4 +39,18 @@ fn negative_and_nan_values_score_zero() {
     let not_a_number = CVVDP.quantise(f32::NAN);
     assert_eq!(negative, 0);
     assert_eq!(not_a_number, 0);
+}
+
+#[test]
+fn a_cap_whose_factor_overflows_is_rejected() {
+    let quantisation = Quantisation {
+        cap: f32::MIN_POSITIVE,
+        floor: 0.0,
+        top: 255,
+    };
+    assert!((255.0 / quantisation.cap).is_infinite());
+
+    let result = quantisation.check();
+
+    assert!(result.is_err());
 }
