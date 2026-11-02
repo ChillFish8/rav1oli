@@ -30,8 +30,10 @@ strsim = "0.11"
 tempfile = "3"
 thiserror = "2.0.21"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-indicatif = "0.3"
 
+indicatif = { version = "0.18", default-features = false }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 blake3 = { version = "1.8", features = ["mmap", "rayon"] }
 clap = { version = "4", features = ["derive", "env"] }
 parquet = { version = "60.1", default-features = false, features = ["arrow", "zstd"] }

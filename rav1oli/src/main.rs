@@ -6,8 +6,10 @@ mod decode;
     expect(dead_code, reason = "only the quantisation defaults are used outside tests")
 )]
 mod metrics;
+mod progress;
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
+use tracing_subscriber::EnvFilter;
 
 use self::commands::Command;
 use self::commands::passthrough::split_args;
@@ -81,5 +83,10 @@ unsafe fn setup_logging(args_log_level: Option<&str>) {
         unsafe { std::env::set_var("RUST_LOG", level) };
     }
 
-    tracing_subscriber::fmt::init();
+    let filter = EnvFilter::from_default_env();
+    let writer = progress::tracing_writer();
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(writer)
+        .init();
 }
