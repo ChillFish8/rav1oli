@@ -2,7 +2,7 @@ mod cache;
 mod decoder;
 mod lock;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub use self::cache::CacheLocation;
 #[expect(unused_imports, reason = "the decoder is only used by tests")]

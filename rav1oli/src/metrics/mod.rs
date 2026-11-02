@@ -1,9 +1,15 @@
+mod colour;
 mod display;
 mod quantise;
 mod statistics;
 #[cfg(test)]
 mod tests;
 
+#[cfg_attr(
+    not(test),
+    expect(unused_imports, reason = "the metrics are only used by tests")
+)]
+pub use self::colour::{FrameDescription, PlaneBuffers, check_compatible, colour_space};
 #[cfg_attr(
     not(test),
     expect(unused_imports, reason = "the metrics are only used by tests")
