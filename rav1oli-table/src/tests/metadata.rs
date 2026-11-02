@@ -1,6 +1,6 @@
 use super::sample_metadata;
 use crate::metadata::DisplaySettings;
-use crate::{MapSummary, Statistics};
+use crate::{MapSummary, Quantisation, Statistics};
 
 fn sample_statistics(offset: f64) -> Statistics {
     Statistics {
@@ -89,8 +89,8 @@ fn a_different_intensity_target_is_reported() {
 fn different_quantisation_is_reported() {
     let mut stored = sample_metadata();
     let mut current = stored.clone();
-    stored.metric.quantisation.cap = 8.0;
-    current.metric.quantisation.cap = 1.0;
+    stored.quantisation.cap = 8.0;
+    current.quantisation.cap = 1.0;
 
     let mismatches = stored.check_against(&current).unwrap();
 
@@ -125,4 +125,21 @@ fn summary_round_trips_through_json() {
 
         assert_eq!(decoded, summary);
     }
+}
+
+#[test]
+fn dequantise_inverts_the_scale() {
+    let quantisation = Quantisation {
+        cap: 8.0,
+        floor: 0.5,
+        top: 255,
+    };
+
+    let saturated = quantisation.dequantise(255);
+    let zero = quantisation.dequantise(0);
+    let middle = quantisation.dequantise(16);
+
+    assert_eq!(saturated, 8.0);
+    assert_eq!(zero, 0.0);
+    assert_eq!(middle, 16.0 / 255.0 * 8.0);
 }

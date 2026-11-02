@@ -29,6 +29,8 @@ pub struct MapWriter {
 
 impl MapWriter {
     pub fn create(path: &Path, metadata: &MapMetadata) -> Result<Self, TableError> {
+        metadata.quantisation.check()?;
+
         let properties = writer_properties();
         let schema = map_schema(metadata.metric.metric);
         let file = File::create(path)?;

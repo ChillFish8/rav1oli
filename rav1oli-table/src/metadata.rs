@@ -17,6 +17,7 @@ pub struct MapMetadata {
     pub source: SourceInfo,
     pub encoder: EncoderSettings,
     pub metric: MetricSettings,
+    pub quantisation: Quantisation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,7 +49,6 @@ pub struct MetricSettings {
     pub temporal: bool,
     pub display: Option<DisplaySettings>,
     pub intensity_target: Option<f32>,
-    pub quantisation: Quantisation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +67,39 @@ pub struct Quantisation {
     pub cap: f32,
     pub floor: f32,
     pub top: u8,
+}
+
+impl Quantisation {
+    /// Checks the scale can be used to quantise and dequantise scores.
+    pub fn check(&self) -> Result<(), TableError> {
+        if !self.cap.is_finite() || self.cap <= 0.0 {
+            return Err(TableError::InvalidQuantisation("cap must be finite and above 0"));
+        }
+
+        if !self.floor.is_finite() || self.floor < 0.0 {
+            return Err(TableError::InvalidQuantisation(
+                "floor must be finite and at least 0",
+            ));
+        }
+
+        if self.floor >= self.cap {
+            return Err(TableError::InvalidQuantisation("floor must be below the cap"));
+        }
+
+        if self.top == 0 {
+            return Err(TableError::InvalidQuantisation("top must be above 0"));
+        }
+
+        Ok(())
+    }
+
+    /// Turns a score back into a metric value.
+    ///
+    /// A code of `top` is saturated, meaning the value was at or above the cap. A code of 0 means
+    /// the value was below the floor or truly zero.
+    pub fn dequantise(&self, code: u8) -> f32 {
+        f32::from(code) / f32::from(self.top) * self.cap
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -213,8 +246,8 @@ impl MapMetadata {
         let current_target = describe_target(current.metric.intensity_target);
         push_if_different(&mut mismatches, "intensity target", stored_target, current_target);
 
-        let stored_quantisation = describe_quantisation(&self.metric.quantisation);
-        let current_quantisation = describe_quantisation(&current.metric.quantisation);
+        let stored_quantisation = describe_quantisation(&self.quantisation);
+        let current_quantisation = describe_quantisation(&current.quantisation);
         push_if_different(
             &mut mismatches,
             "quantisation",

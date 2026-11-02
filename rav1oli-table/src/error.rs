@@ -27,6 +27,8 @@ pub enum TableError {
         stored: String,
         current: String,
     },
+    #[error("the quantisation is unusable, {0}")]
+    InvalidQuantisation(&'static str),
     #[error("expected {expected} scores per frame but got {actual}")]
     FrameSizeMismatch { expected: usize, actual: usize },
     #[error("expected {expected} frames but got {actual}")]

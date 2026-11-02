@@ -10,7 +10,7 @@ use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchR
 use parquet::file::metadata::ParquetMetaData;
 
 use crate::error::TableError;
-use crate::metadata::{FrameScores, METADATA_KEY, MapMetadata, MapSummary, Metric};
+use crate::metadata::{FrameScores, METADATA_KEY, MapMetadata, MapSummary, Metric, Quantisation};
 use crate::schema::map_schema;
 
 /// The number of frames decoded from the file at a time.
@@ -23,6 +23,7 @@ pub struct Frame {
     grid_width: u32,
     scores: Vec<u8>,
     frame_scores: FrameScores,
+    quantisation: Quantisation,
 }
 
 impl Frame {
@@ -44,6 +45,12 @@ impl Frame {
         let row_start = block_y as usize * self.grid_width as usize;
         self.scores[row_start + block_x as usize]
     }
+
+    /// The metric value of the block in column `block_x` and row `block_y`.
+    pub fn value(&self, block_x: u32, block_y: u32) -> f32 {
+        let code = self.score(block_x, block_y);
+        self.quantisation.dequantise(code)
+    }
 }
 
 /// Reads a distortion map back one frame at a time.
@@ -61,6 +68,7 @@ impl MapReader {
         let file = File::open(path)?;
         let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
         let (metadata, summary) = read_metadata(builder.metadata())?;
+        metadata.quantisation.check()?;
         check_layout(builder.schema(), metadata.metric.metric)?;
 
         let row_count = builder.metadata().file_metadata().num_rows();
@@ -85,6 +93,10 @@ impl MapReader {
 
     pub fn metadata(&self) -> &MapMetadata {
         &self.metadata
+    }
+
+    pub fn quantisation(&self) -> Quantisation {
+        self.metadata.quantisation
     }
 
     pub fn summary(&self) -> &MapSummary {
@@ -118,6 +130,7 @@ impl MapReader {
                 grid_width: self.metadata.source.grid_width(),
                 scores: frame_scores.to_vec(),
                 frame_scores: metric_scores,
+                quantisation: self.metadata.quantisation,
             };
             self.pending.push_back(frame);
             self.next_index += 1;

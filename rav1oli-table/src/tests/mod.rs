@@ -42,12 +42,12 @@ pub(crate) fn sample_metadata() -> MapMetadata {
         temporal: true,
         display: Some(display),
         intensity_target: None,
-        quantisation,
     };
 
     MapMetadata {
         source,
         encoder,
         metric,
+        quantisation,
     }
 }

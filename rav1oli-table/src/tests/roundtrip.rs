@@ -10,7 +10,17 @@ use parquet::file::properties::WriterProperties;
 
 use crate::metadata::METADATA_KEY;
 use crate::tests::sample_metadata;
-use crate::{FrameScores, MapMetadata, MapReader, MapSummary, MapWriter, Metric, Statistics, TableError};
+use crate::{
+    FrameScores,
+    MapMetadata,
+    MapReader,
+    MapSummary,
+    MapWriter,
+    Metric,
+    Quantisation,
+    Statistics,
+    TableError,
+};
 
 fn cvvdp_scores(seed: u32) -> FrameScores {
     FrameScores::Cvvdp {
@@ -389,4 +399,93 @@ fn every_mismatched_summary_is_an_error() {
         let error = result.unwrap_err();
         assert!(matches!(error, TableError::SummaryMismatch { .. }));
     }
+}
+
+#[test]
+fn the_reader_exposes_the_stored_quantisation() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let mut metadata = sample_metadata();
+    metadata.quantisation = Quantisation {
+        cap: 8.0,
+        floor: 0.5,
+        top: 255,
+    };
+    write_map(&path, &metadata);
+
+    let reader = MapReader::open(&path).unwrap();
+
+    assert_eq!(reader.quantisation(), metadata.quantisation);
+}
+
+#[test]
+fn frames_dequantise_with_the_stored_quantisation() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("map.parquet");
+    let mut metadata = sample_metadata();
+    metadata.quantisation = Quantisation {
+        cap: 4.0,
+        floor: 0.0,
+        top: 255,
+    };
+    let mut scores = vec![0; metadata.source.blocks_per_frame()];
+    scores[0] = 255;
+    let mut writer = MapWriter::create(&path, &metadata).unwrap();
+
+    for seed in 0..metadata.source.frame_count {
+        writer.write_frame(&scores, cvvdp_scores(seed)).unwrap();
+    }
+
+    let summary = cvvdp_summary();
+    writer.finish(&summary).unwrap();
+
+    let mut reader = MapReader::open(&path).unwrap();
+    let frame = reader.next().unwrap().unwrap();
+
+    assert_eq!(frame.value(0, 0), 4.0);
+    assert_eq!(frame.value(1, 0), 0.0);
+}
+
+#[test]
+fn opening_a_map_with_zero_top_is_an_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("zero_top.parquet");
+    let mut metadata = sample_metadata();
+    metadata.quantisation.top = 0;
+    let summary = cvvdp_summary();
+    let json = metadata.to_json(&summary).unwrap();
+    let footer = KeyValue::new(METADATA_KEY.to_string(), json);
+    write_plain_parquet(&path, Some(vec![footer]));
+
+    let result = MapReader::open(&path);
+
+    assert!(matches!(result, Err(TableError::InvalidQuantisation(_))));
+}
+
+#[test]
+fn creating_a_map_with_an_unusable_quantisation_is_an_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("unusable.parquet");
+    let usable = sample_metadata().quantisation;
+    let zero_cap = Quantisation { cap: 0.0, ..usable };
+    let nan_cap = Quantisation {
+        cap: f32::NAN,
+        ..usable
+    };
+    let floor_at_cap = Quantisation {
+        floor: usable.cap,
+        ..usable
+    };
+    let zero_top = Quantisation { top: 0, ..usable };
+
+    for quantisation in [zero_cap, nan_cap, floor_at_cap, zero_top] {
+        let mut metadata = sample_metadata();
+        metadata.quantisation = quantisation;
+
+        let result = MapWriter::create(&path, &metadata);
+
+        assert!(matches!(result, Err(TableError::InvalidQuantisation(_))));
+    }
+
+    assert!(!path.exists());
 }
