@@ -184,8 +184,8 @@ fn lookups_follow_the_quantisation() {
     assert_eq!(lookups.drops[0], 0);
     assert_eq!(lookups.cuts[0], 0);
     assert_eq!(lookups.drops[255], 80);
-    assert_eq!(lookups.cuts[255], 230);
-    assert_eq!(lookups.drops[48], 8);
+    assert_eq!(lookups.cuts[255], 110);
+    assert_eq!(lookups.drops[51], 20);
 }
 
 #[test]

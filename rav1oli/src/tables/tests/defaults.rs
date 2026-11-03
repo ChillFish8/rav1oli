@@ -11,8 +11,8 @@ const CVVDP_CUT: [(f64, u8); 6] = [
     (0.75, 190),
     (1.0, 230),
 ];
-const BUTTERAUGLI_DROP: [(f64, u8); 5] = [(0.5, 0), (1.5, 8), (3.0, 24), (5.0, 48), (8.0, 80)];
-const BUTTERAUGLI_CUT: [(f64, u8); 5] = [(0.5, 0), (1.5, 40), (3.0, 110), (5.0, 180), (8.0, 230)];
+const BUTTERAUGLI_DROP: [(f64, u8); 6] = [(0.5, 0), (1.0, 8), (1.6, 20), (2.2, 36), (3.2, 56), (4.5, 80)];
+const BUTTERAUGLI_CUT: [(f64, u8); 3] = [(0.5, 0), (1.6, 40), (3.2, 110)];
 
 #[test]
 fn both_default_files_parse_and_validate() {
