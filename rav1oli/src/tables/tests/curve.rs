@@ -1,11 +1,16 @@
 use rav1oli_quantise::Quantisation;
+use rav1oli_svt::MapMode;
 use rav1oli_table::Metric;
 
 use crate::metrics::BUTTERAUGLI_QUANTISATION;
-use crate::tables::{Curve, Tables};
+use crate::tables::{Curve, Lookups, Tables};
 
 fn table_json(metric: &str, drop: &str, cut: &str) -> String {
-    format!(r#"{{"version": 1, "metric": "{metric}", "drop": {drop}, "cut": {cut}}}"#)
+    format!(r#"{{"version": 1, "mode": "additive", "metric": "{metric}", "drop": {drop}, "cut": {cut}}}"#)
+}
+
+fn redistribute_json(offset: &str, weight: &str) -> String {
+    format!(r#"{{"version": 1, "metric": "butteraugli", "offset": {offset}, "weight": {weight}}}"#)
 }
 
 fn error_of(json: &str) -> String {
@@ -14,7 +19,7 @@ fn error_of(json: &str) -> String {
 }
 
 fn curve(points: &[(f64, f64)]) -> Curve {
-    Curve::new("drop", points, 80).expect("the curve should be valid")
+    Curve::new("drop", points, 0, 80).expect("the curve should be valid")
 }
 
 #[test]
@@ -23,18 +28,19 @@ fn parses_a_full_table() {
     let tables = Tables::parse(&json).unwrap();
 
     assert_eq!(tables.metric, Metric::Cvvdp);
-    assert_eq!(tables.drop.points(), [(0.0, 0), (1.0, 10)]);
-    assert_eq!(tables.cut.points(), [(0.5, 5)]);
+    assert_eq!(tables.mode, MapMode::Additive);
+    assert_eq!(tables.superblock.points(), [(0.0, 0), (1.0, 10)]);
+    assert_eq!(tables.block.points(), [(0.5, 5)]);
 }
 
 #[test]
 fn a_missing_curve_uses_the_default() {
-    let json = r#"{"version": 1, "metric": "butteraugli", "drop": [[1.0, 3]]}"#;
+    let json = r#"{"version": 1, "mode": "additive", "metric": "butteraugli", "drop": [[1.0, 3]]}"#;
     let tables = Tables::parse(json).unwrap();
-    let defaults = Tables::default_for(Metric::Butteraugli);
+    let defaults = Tables::default_for(Metric::Butteraugli, MapMode::Additive);
 
-    assert_eq!(tables.drop.points(), [(1.0, 3)]);
-    assert_eq!(tables.cut.points(), defaults.cut.points());
+    assert_eq!(tables.superblock.points(), [(1.0, 3)]);
+    assert_eq!(tables.block.points(), defaults.block.points());
 }
 
 #[test]
@@ -161,7 +167,7 @@ fn a_single_point_is_constant() {
 
 #[test]
 fn a_table_for_another_metric_is_an_error() {
-    let tables = Tables::default_for(Metric::Cvvdp);
+    let tables = Tables::default_for(Metric::Cvvdp, MapMode::Redistribute);
     let error = tables.check_metric(Metric::Butteraugli, "--metric").unwrap_err();
     let message = format!("{error:#}");
 
@@ -172,28 +178,112 @@ fn a_table_for_another_metric_is_an_error() {
 }
 
 #[test]
-fn lookups_follow_the_quantisation() {
-    let tables = Tables::default_for(Metric::Butteraugli);
+fn additive_lookups_follow_the_quantisation() {
+    let tables = Tables::default_for(Metric::Butteraugli, MapMode::Additive);
     let quantisation = Quantisation {
         cap: 8.0,
         floor: 0.5,
         top: 255,
     };
-    let lookups = tables.lookups(&quantisation);
+    let Lookups::Additive { drops, cuts } = tables.lookups(&quantisation) else {
+        panic!("an additive table gives additive lookups");
+    };
 
-    assert_eq!(lookups.drops[0], 0);
-    assert_eq!(lookups.cuts[0], 0);
-    assert_eq!(lookups.drops[255], 80);
-    assert_eq!(lookups.cuts[255], 110);
-    assert_eq!(lookups.drops[51], 20);
+    assert_eq!(drops[0], 0);
+    assert_eq!(cuts[0], 0);
+    assert_eq!(drops[255], 80);
+    assert_eq!(cuts[255], 110);
+    assert_eq!(drops[51], 20);
 }
 
 #[test]
-fn lookups_work_with_the_default_quantisation() {
-    let tables = Tables::default_for(Metric::Butteraugli);
-    let lookups = tables.lookups(&BUTTERAUGLI_QUANTISATION);
+fn redistribute_lookups_follow_the_quantisation() {
+    let tables = Tables::default_for(Metric::Butteraugli, MapMode::Redistribute);
+    let Lookups::Redistribute { offsets, weights } = tables.lookups(&BUTTERAUGLI_QUANTISATION) else {
+        panic!("a redistribute table gives redistribute lookups");
+    };
 
-    assert_eq!(lookups.drops[255], 80);
+    assert_eq!(offsets[0], 0);
+    assert_eq!(offsets[255], -24);
+    assert!(weights.iter().all(|&weight| weight == 0));
+}
+
+#[test]
+fn a_table_without_a_mode_is_redistribute() {
+    let json = redistribute_json("[[0.0, 0], [2.0, -10]]", "[[0.0, 0], [2.0, -64]]");
+    let tables = Tables::parse(&json).unwrap();
+
+    assert_eq!(tables.mode, MapMode::Redistribute);
+    assert_eq!(tables.superblock.points(), [(0.0, 0), (2.0, -10)]);
+    assert_eq!(tables.block.points(), [(0.0, 0), (2.0, -64)]);
+}
+
+#[test]
+fn a_missing_redistribute_curve_uses_the_default() {
+    let json = r#"{"version": 1, "metric": "butteraugli", "offset": [[1.0, -3]]}"#;
+    let tables = Tables::parse(json).unwrap();
+    let defaults = Tables::default_for(Metric::Butteraugli, MapMode::Redistribute);
+
+    assert_eq!(tables.superblock.points(), [(1.0, -3)]);
+    assert_eq!(tables.block.points(), defaults.block.points());
+}
+
+#[test]
+fn a_drop_curve_in_a_redistribute_table_is_an_error() {
+    let message = error_of(r#"{"version": 1, "metric": "cvvdp", "drop": [[0.0, 0]]}"#);
+
+    assert!(
+        message.contains("redistribute table takes offset and weight"),
+        "{message}"
+    );
+    assert!(message.contains("drop curve"), "{message}");
+    assert!(message.contains(r#""mode": "additive""#), "{message}");
+}
+
+#[test]
+fn an_offset_curve_in_an_additive_table_is_an_error() {
+    let message = error_of(r#"{"version": 1, "mode": "additive", "metric": "cvvdp", "offset": [[0.0, 0]]}"#);
+
+    assert!(message.contains("additive table takes drop and cut"), "{message}");
+    assert!(message.contains("offset curve"), "{message}");
+}
+
+#[test]
+fn an_unknown_mode_is_an_error() {
+    let message = error_of(r#"{"version": 1, "mode": "boost", "metric": "cvvdp"}"#);
+
+    assert!(message.contains("boost"), "{message}");
+}
+
+#[test]
+fn an_offset_above_40_is_an_error() {
+    let message = error_of(&redistribute_json("[[0.0, 41]]", "[[0.0, 0]]"));
+
+    assert!(message.contains("offset curve's point 0"), "{message}");
+    assert!(message.contains("largest offset of 40"), "{message}");
+}
+
+#[test]
+fn an_offset_below_minus_80_is_an_error() {
+    let message = error_of(&redistribute_json("[[0.0, 0], [1.0, -81]]", "[[0.0, 0]]"));
+
+    assert!(message.contains("offset curve's point 1"), "{message}");
+    assert!(message.contains("smallest offset of -80"), "{message}");
+}
+
+#[test]
+fn a_weight_below_minus_128_is_an_error() {
+    let message = error_of(&redistribute_json("[[0.0, 0]]", "[[0.0, -129]]"));
+
+    assert!(message.contains("weight curve's point 0"), "{message}");
+    assert!(message.contains("-128"), "{message}");
+}
+
+#[test]
+fn a_negative_drop_is_an_error() {
+    let message = error_of(&table_json("cvvdp", "[[0.0, -1]]", "[[0.0, 0]]"));
+
+    assert!(message.contains("smallest drop of 0"), "{message}");
 }
 
 #[test]
@@ -221,7 +311,7 @@ fn a_fractional_version_is_an_error() {
 
 #[test]
 fn an_infinite_distortion_names_the_curve_and_point() {
-    let error = Curve::new("cut", &[(0.0, 0.0), (f64::INFINITY, 1.0)], 230).unwrap_err();
+    let error = Curve::new("cut", &[(0.0, 0.0), (f64::INFINITY, 1.0)], 0, 230).unwrap_err();
     let message = error.to_string();
 
     assert!(message.contains("cut curve's point 1"), "{message}");

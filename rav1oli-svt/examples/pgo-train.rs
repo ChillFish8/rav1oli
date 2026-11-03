@@ -23,6 +23,7 @@ use rav1oli_svt::{
     EncoderSettings,
     MAX_CUT,
     MAX_DROP,
+    MapMode,
     Planes,
 };
 
@@ -118,6 +119,7 @@ fn run() -> TrainResult<()> {
         crf: CRF,
         svt_args: Vec::new(),
         cpu_cap: CpuCap::Default,
+        map_mode: Some(MapMode::Additive),
     };
     let settings = settings.with_cpu_cap(config.cpu_cap);
     let mut encoder = Encoder::new(&settings, &config.output)?;
@@ -386,7 +388,7 @@ fn random_grids(random: &mut XorShift32, width: u32, height: u32) -> TrainResult
 
     let drops = (0..drop_cells).map(|_| random.cell(MAX_DROP)).collect();
     let cuts = (0..cut_cells).map(|_| random.cell(MAX_CUT)).collect();
-    let grids = DistortionGrids::new(width, height, drops, cuts)?;
+    let grids = DistortionGrids::additive(width, height, drops, cuts)?;
 
     Ok(grids)
 }

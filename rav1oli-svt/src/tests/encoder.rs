@@ -11,6 +11,8 @@ use crate::{
     EncodeError,
     Encoder,
     EncoderSettings,
+    GridError,
+    MapMode,
     ParamError,
     Planes,
 };
@@ -41,6 +43,7 @@ pub(super) fn settings(bit_depth: u8, svt_args: &[&str]) -> EncoderSettings {
         crf: 40,
         svt_args,
         cpu_cap: CpuCap::Default,
+        map_mode: Some(MapMode::Additive),
     }
 }
 
@@ -63,7 +66,7 @@ pub(super) fn mixed_grids(frame: u64) -> DistortionGrids {
     let cuts = (0..17 * 9)
         .map(|cell| ((cell + frame) * 37 % 231) as u8)
         .collect();
-    DistortionGrids::new(WIDTH, HEIGHT, drops, cuts).unwrap()
+    DistortionGrids::additive(WIDTH, HEIGHT, drops, cuts).unwrap()
 }
 
 /// An 8-bit version of [gradient].
@@ -213,7 +216,7 @@ fn grids_for_another_frame_size_are_rejected() {
     let path = directory.path().join("grids.ivf");
     let mut encoder = Encoder::new(&settings(8, &[]), &path).unwrap();
 
-    let grids = DistortionGrids::new(64, 64, vec![0], vec![0; 64]).unwrap();
+    let grids = DistortionGrids::additive(64, 64, vec![0], vec![0; 64]).unwrap();
     let y_plane = vec![0; WIDTH as usize * HEIGHT as usize];
     let chroma_plane = vec![0; CHROMA_WIDTH * CHROMA_HEIGHT];
     let planes = Planes::Eight {
@@ -387,7 +390,7 @@ fn odd_dimensions_with_grids_encode() {
     for frame in 0..FRAMES {
         let drops = vec![(frame * 20) as u8; 3 * 2];
         let cuts = vec![(frame * 50) as u8; 17 * 9];
-        let grids = DistortionGrids::new(width as u32, height as u32, drops, cuts).unwrap();
+        let grids = DistortionGrids::additive(width as u32, height as u32, drops, cuts).unwrap();
 
         let y_plane = gradient_eight(width, height, frame, 255);
         let u_plane = gradient_eight(chroma_width, chroma_height, frame, 200);
@@ -450,4 +453,93 @@ fn asm_cannot_be_passed_as_an_svt_flag() {
     let error = Encoder::new(&asm_settings, &path).unwrap_err();
     let is_encoder_owned = matches!(error, EncodeError::Param(ParamError::EncoderOwned { .. }));
     assert!(is_encoder_owned, "{error:?}");
+}
+
+fn redistribute_settings(svt_args: &[&str]) -> EncoderSettings {
+    let base = settings(8, svt_args);
+    EncoderSettings {
+        map_mode: Some(MapMode::Redistribute),
+        ..base
+    }
+}
+
+fn mixed_redistribute_grids(frame: u64) -> DistortionGrids {
+    let offsets = (0..6)
+        .map(|cell| ((cell + frame) * 17 % 121) as i8 - 80)
+        .collect();
+    let weights = (0..17 * 9)
+        .map(|cell| ((cell + frame) * 37 % 256) as u8 as i8)
+        .collect();
+    DistortionGrids::redistribute(WIDTH, HEIGHT, offsets, weights).unwrap()
+}
+
+#[test]
+fn redistribute_grids_encode() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("redistribute.ivf");
+    let settings = redistribute_settings(&[]);
+    let mut encoder = Encoder::new(&settings, &path).unwrap();
+
+    for frame in 0..FRAMES {
+        let grids = mixed_redistribute_grids(frame);
+        encode_eight_bit(&mut encoder, frame, Some(&grids));
+    }
+
+    let summary = encoder.finish().unwrap();
+    assert_eq!(summary.frames, FRAMES);
+    check_output(&path);
+}
+
+#[test]
+fn additive_grids_are_rejected_in_redistribute_mode() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("mismatch.ivf");
+    let settings = redistribute_settings(&[]);
+    let mut encoder = Encoder::new(&settings, &path).unwrap();
+
+    let grids = mixed_grids(0);
+    let y_plane = vec![0; WIDTH as usize * HEIGHT as usize];
+    let chroma_plane = vec![0; CHROMA_WIDTH * CHROMA_HEIGHT];
+    let planes = Planes::Eight {
+        y: &y_plane,
+        u: &chroma_plane,
+        v: &chroma_plane,
+        strides: [WIDTH as usize, CHROMA_WIDTH, CHROMA_WIDTH],
+    };
+
+    let error = encoder.send_frame(&planes, Some(&grids)).unwrap_err();
+    let is_expected = matches!(
+        error,
+        EncodeError::Grid(GridError::ModeMismatch {
+            grid_mode: MapMode::Additive,
+            encoder_mode: MapMode::Redistribute,
+        })
+    );
+    assert!(is_expected, "{error:?}");
+}
+
+#[test]
+fn a_map_mode_flag_that_disagrees_is_an_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("conflict.ivf");
+    let settings = redistribute_settings(&["--distortion-map-mode", "0"]);
+
+    let error = Encoder::new(&settings, &path).unwrap_err();
+    let message = error.to_string();
+
+    let is_expected = matches!(
+        error,
+        EncodeError::Param(ParamError::MapModeConflict { flag_value: 0, .. })
+    );
+    assert!(is_expected, "{error:?}");
+    assert!(message.contains("redistribute"), "{message}");
+}
+
+#[test]
+fn a_map_mode_flag_that_agrees_is_accepted() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("agree.ivf");
+    let settings = redistribute_settings(&["--distortion-map-mode", "1", "--distortion-map-max-raise", "12"]);
+
+    Encoder::new(&settings, &path).unwrap();
 }

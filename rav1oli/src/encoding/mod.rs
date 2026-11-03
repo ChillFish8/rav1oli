@@ -5,6 +5,7 @@ mod tests;
 use std::path::Path;
 
 use anyhow::Context;
+use rav1oli_svt::{EncoderSettings, MapMode};
 use rav1oli_table::{MapMetadata, MapReader, hash_source};
 
 pub use self::grids::{GridBuilder, check_frame_index};
@@ -53,7 +54,7 @@ pub fn encode(request: &EncodeRequest<'_>) -> anyhow::Result<EncodeOutcome> {
     let map_metric = stored.metric.metric;
     let tables = match request.tables {
         Some(path) => Tables::load(path)?,
-        None => Tables::default_for(map_metric),
+        None => Tables::default_for(map_metric, MapMode::Redistribute),
     };
     tables.check_metric(map_metric, "the map")?;
     let lookups = tables.lookups(&stored.quantisation);
@@ -89,7 +90,11 @@ pub fn encode(request: &EncodeRequest<'_>) -> anyhow::Result<EncodeOutcome> {
     }
 
     let mut grid_builder = GridBuilder::new(lookups, &stored.source)?;
-    let settings = encoder_settings(&source, colour, request.encoder);
+    let source_settings = encoder_settings(&source, colour, request.encoder);
+    let settings = EncoderSettings {
+        map_mode: Some(tables.mode),
+        ..source_settings
+    };
 
     tracing::info!(output = %request.output.display(), "starting the final encode");
     let grids_for = |index: usize| {

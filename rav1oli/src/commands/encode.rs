@@ -20,7 +20,7 @@ pub struct EncodeArgs {
     /// Where to write the encoded video.
     #[arg(short, long)]
     pub output: PathBuf,
-    /// A table file replacing the default drop and cut curves.
+    /// A table file replacing the default curves, which also picks how SVT reads the map.
     #[arg(long)]
     pub tables: Option<PathBuf>,
 

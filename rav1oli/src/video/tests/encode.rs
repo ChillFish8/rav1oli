@@ -135,7 +135,7 @@ fn a_failed_first_pass_removes_its_output() {
 }
 
 fn zero_grids() -> DistortionGrids {
-    DistortionGrids::new(64, 64, vec![0; 1], vec![0; 64]).unwrap()
+    DistortionGrids::additive(64, 64, vec![0; 1], vec![0; 64]).unwrap()
 }
 
 #[test]

@@ -11,6 +11,7 @@ use crate::interrupt;
 use crate::video::SourceVideo;
 
 const CVVDP_TABLE: &str = r#"{"version": 1, "metric": "cvvdp"}"#;
+const ADDITIVE_BUTTERAUGLI_TABLE: &str = r#"{"version": 1, "mode": "additive", "metric": "butteraugli"}"#;
 
 struct ResetInterrupt;
 
@@ -70,7 +71,28 @@ fn encode_writes_an_output_matching_the_source() {
 }
 
 #[test]
-fn higher_map_scores_change_the_encoded_size() {
+fn higher_additive_map_scores_change_the_encoded_size() {
+    let directory = tempfile::tempdir().unwrap();
+    let video = copy_fixture(directory.path());
+    let low_map = write_constant_map(&video, &directory.path().join("low.parquet"), 40, 0);
+    let high_map = write_constant_map(&video, &directory.path().join("high.parquet"), 40, 255);
+    let table = directory.path().join("additive.json");
+    std::fs::write(&table, ADDITIVE_BUTTERAUGLI_TABLE).unwrap();
+    let low_output = directory.path().join("low.ivf");
+    let high_output = directory.path().join("high.ivf");
+    let encoder = encoder_options(40);
+
+    let low_request = request(&video, &low_map, &low_output, Some(&table), &encoder);
+    let high_request = request(&video, &high_map, &high_output, Some(&table), &encoder);
+
+    let low = encode(&low_request).unwrap();
+    let high = encode(&high_request).unwrap();
+
+    assert!(high.bytes > low.bytes, "{} vs {}", high.bytes, low.bytes);
+}
+
+#[test]
+fn a_constant_redistribute_map_moves_no_bits() {
     let directory = tempfile::tempdir().unwrap();
     let video = copy_fixture(directory.path());
     let low_map = write_constant_map(&video, &directory.path().join("low.parquet"), 40, 0);
@@ -85,7 +107,7 @@ fn higher_map_scores_change_the_encoded_size() {
     let low = encode(&low_request).unwrap();
     let high = encode(&high_request).unwrap();
 
-    assert!(high.bytes > low.bytes, "{} vs {}", high.bytes, low.bytes);
+    assert_eq!(high.bytes, low.bytes);
 }
 
 #[test]

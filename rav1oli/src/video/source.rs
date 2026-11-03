@@ -160,5 +160,6 @@ pub fn encoder_settings(
         crf: options.crf,
         svt_args: options.svt_args.clone(),
         cpu_cap: CpuCap::Default,
+        map_mode: None,
     }
 }

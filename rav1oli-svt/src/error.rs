@@ -1,3 +1,5 @@
+use crate::grids::MapMode;
+
 /// A problem with the SVT-AV1 flags passed to the encoder.
 #[derive(Debug, thiserror::Error)]
 pub enum ParamError {
@@ -22,15 +24,27 @@ pub enum ParamError {
     #[error("{reason}")]
     Requirement { reason: &'static str },
 
+    #[error(
+        "`distortion-map-mode` {flag_value} disagrees with the table's {table_mode} mode, which sets it to \
+         {table_value}"
+    )]
+    MapModeConflict {
+        flag_value: u8,
+        table_mode: MapMode,
+        table_value: u8,
+    },
+
     #[error("SVT-AV1 rejected the flags `{flags}` together (status {status:#x}), see its log for why")]
     Combination { flags: String, status: i32 },
 }
 
-/// Which of the two distortion grids a [GridError] is about.
+/// Which distortion grid a [GridError] is about.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum GridKind {
     Drops,
     Cuts,
+    Offsets,
+    Weights,
 }
 
 impl std::fmt::Display for GridKind {
@@ -38,6 +52,8 @@ impl std::fmt::Display for GridKind {
         let name = match self {
             GridKind::Drops => "64x64 qindex drop grid",
             GridKind::Cuts => "8x8 lambda cut grid",
+            GridKind::Offsets => "64x64 qindex offset grid",
+            GridKind::Weights => "8x8 lambda weight grid",
         };
 
         formatter.write_str(name)
@@ -60,13 +76,14 @@ pub enum GridError {
         actual: usize,
     },
 
-    #[error("the {grid} holds {value} at row {row}, column {column}, above its maximum of {max}")]
+    #[error("the {grid} holds {value} at row {row}, column {column}, outside its range of {min} to {max}")]
     OutOfRange {
         grid: GridKind,
         row: usize,
         column: usize,
-        value: u8,
-        max: u8,
+        value: i16,
+        min: i16,
+        max: i16,
     },
 
     #[error(
@@ -78,6 +95,12 @@ pub enum GridError {
         grid_height: u32,
         frame_width: u32,
         frame_height: u32,
+    },
+
+    #[error("the grids are for {grid_mode} mode, but the encoder reads the map in {encoder_mode} mode")]
+    ModeMismatch {
+        grid_mode: MapMode,
+        encoder_mode: MapMode,
     },
 }
 

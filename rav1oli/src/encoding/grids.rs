@@ -4,8 +4,8 @@ use rav1oli_table::SourceInfo;
 
 use crate::tables::Lookups;
 
-/// The share of a superblock's blocks that its drop must cover.
-pub const DROP_PERCENTILE: f64 = 0.9;
+/// The share of a superblock's blocks whose need for bits its value must cover.
+pub const SUPERBLOCK_PERCENTILE: f64 = 0.9;
 
 const BLOCK_SIZE: u32 = rav1oli_table::BLOCK_SIZE;
 const BLOCKS_PER_SUPERBLOCK: usize = 8;
@@ -17,7 +17,7 @@ pub struct GridBuilder {
     height: u32,
     grid_width: usize,
     grid_height: usize,
-    scratch: Vec<u8>,
+    scratch: Vec<i16>,
 }
 
 impl GridBuilder {
@@ -59,8 +59,9 @@ impl GridBuilder {
 
     /// Builds the grids for one frame's scores, laid out row by row.
     ///
-    /// Each superblock's drop is the nearest-rank percentile of its blocks' drops.
-    /// Superblocks at the frame edge only use the blocks inside the frame.
+    /// Each superblock takes the nearest-rank percentile of its blocks' values, counted from the end
+    /// that gives the most bits. That is the largest drop in additive mode and the most negative offset in
+    /// redistribute mode. Superblocks at the frame edge only use the blocks inside the frame.
     pub fn build(&mut self, scores: &[u8]) -> anyhow::Result<DistortionGrids> {
         let expected = self.grid_width * self.grid_height;
         if scores.len() != expected {
@@ -72,27 +73,61 @@ impl GridBuilder {
             );
         }
 
-        let cuts: Vec<u8> = scores
-            .iter()
-            .map(|&score| self.lookups.cuts[usize::from(score)])
-            .collect();
-
-        let superblock_columns = self.grid_width.div_ceil(BLOCKS_PER_SUPERBLOCK);
-        let superblock_rows = self.grid_height.div_ceil(BLOCKS_PER_SUPERBLOCK);
-        let mut drops = Vec::with_capacity(superblock_columns * superblock_rows);
-        for superblock_y in 0..superblock_rows {
-            for superblock_x in 0..superblock_columns {
-                let drop = self.superblock_drop(scores, superblock_x, superblock_y);
-                drops.push(drop);
-            }
-        }
-
-        let grids = DistortionGrids::new(self.width, self.height, drops, cuts);
+        let lookups = self.lookups.clone();
+        let grids = match &lookups {
+            Lookups::Additive { drops, cuts } => {
+                let block_cuts = scores.iter().map(|&score| cuts[usize::from(score)]).collect();
+                let superblock_values = self.superblock_values(scores, |score| i16::from(drops[score]), true);
+                let superblock_drops = superblock_values
+                    .into_iter()
+                    .map(|value| u8::try_from(value).expect("a pooled drop is one of the drops"))
+                    .collect();
+                DistortionGrids::additive(self.width, self.height, superblock_drops, block_cuts)
+            },
+            Lookups::Redistribute { offsets, weights } => {
+                let block_weights = scores.iter().map(|&score| weights[usize::from(score)]).collect();
+                let superblock_values =
+                    self.superblock_values(scores, |score| i16::from(offsets[score]), false);
+                let superblock_offsets = superblock_values
+                    .into_iter()
+                    .map(|value| i8::try_from(value).expect("a pooled offset is one of the offsets"))
+                    .collect();
+                DistortionGrids::redistribute(self.width, self.height, superblock_offsets, block_weights)
+            },
+        };
 
         grids.context("the built grids were rejected")
     }
 
-    fn superblock_drop(&mut self, scores: &[u8], superblock_x: usize, superblock_y: usize) -> u8 {
+    /// Pools every superblock's values, row by row. `is_larger_more_bits` picks which end gives more bits.
+    fn superblock_values(
+        &mut self,
+        scores: &[u8],
+        value_of: impl Fn(usize) -> i16,
+        is_larger_more_bits: bool,
+    ) -> Vec<i16> {
+        let superblock_columns = self.grid_width.div_ceil(BLOCKS_PER_SUPERBLOCK);
+        let superblock_rows = self.grid_height.div_ceil(BLOCKS_PER_SUPERBLOCK);
+        let mut values = Vec::with_capacity(superblock_columns * superblock_rows);
+        for superblock_y in 0..superblock_rows {
+            for superblock_x in 0..superblock_columns {
+                let value =
+                    self.superblock_value(scores, superblock_x, superblock_y, &value_of, is_larger_more_bits);
+                values.push(value);
+            }
+        }
+
+        values
+    }
+
+    fn superblock_value(
+        &mut self,
+        scores: &[u8],
+        superblock_x: usize,
+        superblock_y: usize,
+        value_of: &impl Fn(usize) -> i16,
+        is_larger_more_bits: bool,
+    ) -> i16 {
         let first_column = superblock_x * BLOCKS_PER_SUPERBLOCK;
         let end_column = (first_column + BLOCKS_PER_SUPERBLOCK).min(self.grid_width);
         let first_row = superblock_y * BLOCKS_PER_SUPERBLOCK;
@@ -102,18 +137,20 @@ impl GridBuilder {
         for row in first_row..end_row {
             let row_start = row * self.grid_width;
             let row_scores = &scores[row_start + first_column..row_start + end_column];
-            let row_drops = row_scores
-                .iter()
-                .map(|&score| self.lookups.drops[usize::from(score)]);
-            self.scratch.extend(row_drops);
+            let row_values = row_scores.iter().map(|&score| value_of(usize::from(score)));
+            self.scratch.extend(row_values);
         }
 
         let count = self.scratch.len();
-        let rank = (DROP_PERCENTILE * count as f64).ceil() as usize;
-        let index = rank.saturating_sub(1);
-        let (_, drop, _) = self.scratch.select_nth_unstable(index);
+        let rank = (SUPERBLOCK_PERCENTILE * count as f64).ceil() as usize;
+        let index = if is_larger_more_bits {
+            rank.saturating_sub(1)
+        } else {
+            count - rank
+        };
+        let (_, value, _) = self.scratch.select_nth_unstable(index);
 
-        *drop
+        *value
     }
 }
 

@@ -27,7 +27,7 @@ pub struct RunArgs {
     /// Keep the first-pass encode at this path instead of deleting it.
     #[arg(long)]
     pub keep_encode: Option<PathBuf>,
-    /// A table file replacing the default drop and cut curves.
+    /// A table file replacing the default curves, which also picks how SVT reads the map.
     #[arg(long)]
     pub tables: Option<PathBuf>,
 

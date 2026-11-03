@@ -41,7 +41,7 @@ pub use self::encoder::{
     Planes,
 };
 pub use self::error::{EncodeError, GridError, GridKind, ParamError};
-pub use self::grids::{DistortionGrids, MAX_CUT, MAX_DROP};
+pub use self::grids::{DistortionGrids, MAX_CUT, MAX_DROP, MAX_OFFSET, MIN_OFFSET, MapMode};
 pub use self::params::{check_params, is_encoder_owned, param_names};
 
 /// The version string of the linked SVT-AV1 library.

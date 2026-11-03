@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::{ptr, slice};
 
 use crate::error::{EncodeError, GridError, ParamError};
-use crate::grids::DistortionGrids;
+use crate::grids::{DistortionGrids, MapMode};
 use crate::ivf::IvfWriter;
 use crate::params::{self, DefaultConfig, SVT_SUCCESS};
 use crate::sys;
@@ -48,6 +48,9 @@ pub enum CpuCap {
 /// The settings an [Encoder] is created with.
 ///
 /// `svt_args` are extra SVT-AV1 flags in `SvtAv1EncApp` style, such as `["--tune", "0"]`.
+///
+/// `map_mode` sets how SVT reads the distortion map, and a `distortion-map-mode` flag must then agree
+/// with it. With `None` the flags alone decide.
 #[derive(Debug, Clone)]
 pub struct EncoderSettings {
     pub width: u32,
@@ -60,6 +63,7 @@ pub struct EncoderSettings {
     pub crf: u8,
     pub svt_args: Vec<String>,
     pub cpu_cap: CpuCap,
+    pub map_mode: Option<MapMode>,
 }
 
 impl EncoderSettings {
@@ -105,6 +109,7 @@ pub struct Encoder {
     bit_depth: u8,
     widened: Vec<u16>,
     payload: Vec<u32>,
+    map_mode: MapMode,
 }
 
 impl Encoder {
@@ -128,6 +133,9 @@ impl Encoder {
         apply_settings(&mut config.config, settings)?;
         params::apply_params(&mut config.config, &settings.svt_args)?;
         params::check_requirements(&config.config)?;
+        if let Some(map_mode) = settings.map_mode {
+            check_map_mode(&config.config, map_mode)?;
+        }
 
         // SVT starts before the file is created, so a rejected config leaves no output behind.
         let mut session = Session {
@@ -137,6 +145,9 @@ impl Encoder {
             frames_sent: 0,
         };
         session.start()?;
+
+        let mode_value = session.config.config.distortion_map_mode;
+        let map_mode = MapMode::from_svt_value(mode_value).expect("SVT only starts with a mode of 0 or 1");
 
         let file = File::create(output).map_err(|source| io_error(output, source))?;
         let buffered = BufWriter::new(file);
@@ -157,6 +168,7 @@ impl Encoder {
             bit_depth: settings.bit_depth,
             widened: Vec::new(),
             payload: Vec::new(),
+            map_mode,
         })
     }
 
@@ -283,6 +295,14 @@ impl Encoder {
                 grid_height: grids.height(),
                 frame_width: self.layout.width as u32,
                 frame_height: self.layout.height as u32,
+            };
+            return Err(error.into());
+        }
+
+        if grids.mode() != self.map_mode {
+            let error = GridError::ModeMismatch {
+                grid_mode: grids.mode(),
+                encoder_mode: self.map_mode,
             };
             return Err(error.into());
         }
@@ -580,6 +600,9 @@ fn apply_settings(
     config.encoder_bit_depth = ENCODED_BIT_DEPTH;
     config.encoder_color_format = sys::EB_YUV420;
     config.enable_distortion_map = true;
+    if let Some(map_mode) = settings.map_mode {
+        config.distortion_map_mode = map_mode.svt_value();
+    }
     apply_colour(config, &settings.colour);
 
     let preset = settings.preset.to_string();
@@ -593,6 +616,21 @@ fn apply_settings(
     }
 
     Ok(())
+}
+
+/// Errors when a `distortion-map-mode` flag changed the mode the settings set.
+fn check_map_mode(config: &sys::EbSvtAv1EncConfiguration, map_mode: MapMode) -> Result<(), ParamError> {
+    let table_value = map_mode.svt_value();
+    let flag_value = config.distortion_map_mode;
+    if flag_value == table_value {
+        return Ok(());
+    }
+
+    Err(ParamError::MapModeConflict {
+        flag_value,
+        table_mode: map_mode,
+        table_value,
+    })
 }
 
 /// Caps SVT at AVX2 through `asm`, which `svt_args` cannot set as the encoder owns it.

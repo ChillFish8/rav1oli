@@ -97,6 +97,8 @@ const PARAM_NAMES: &[&str] = &[
     "variance-boost-curve",
     "variance-dark-boost",
     "variance-bright-attenuation",
+    "distortion-map-mode",
+    "distortion-map-max-raise",
     "qp-scale-compress-strength",
     "balancing-q-bias",
     "optimize-b-mode",
